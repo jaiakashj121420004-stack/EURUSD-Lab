@@ -1,87 +1,100 @@
 # PROGRESS.md — where the build stands
 
-Read this first in any new session. Update it after every ticket: what's done, what's next, open
-questions. See CLAUDE.md and docs/ROADMAP.md for the full plan (checkboxes there are also kept current).
+Read this first in any new session. Update it after every ticket. See CLAUDE.md and
+docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 1 done — package refactor, same numbers as v0
+## Status: Phase 2 (replay trainer) mostly done -- two tickets partial, flagged below
 
-### Phase 0 — Reproduce v0: done
-- `requirements.txt` + `setup.bat` at repo root (one-double-click Windows setup).
-- `tests/fixtures/make_synth.py`: `--variant {clean,planted}`, `--years`, `--seed`, `--frac`.
-  Generated `EURUSD_M5_synth_{clean,planted}_{2,5}y.csv` (git-ignored, regenerable).
-- `tests/golden/v0/clean_5y_report/`: v0's own output on the clean fixture — the Phase 1
-  regression baseline.
-- AT-01 confirmed on v0/clean (no false edges). AT-02 informally confirmed via v0 on the
-  planted fixture (finds the planted hypothesis, 68% hit, holds OOS).
+### Phase 0 — done. Phase 1 — done.
+See the git log for full detail; summary: v0 golden baseline captured, `nylab/` package built
+(config-driven, matches v0 exactly to 1e-9), 11 tests passing after Phase 1.
 
-### Phase 1 — Package refactor: done
-- New `nylab/` package (see ARCHITECTURE.md layout): `config.py`, `data/{loader,timezones,quality}.py`,
-  `days.py`, `hypotheses.py`, `stats.py`, `models/london_sweep_reversal.py`,
-  `report/{charts,html,summary}.py`, `cache.py`, `__main__.py`.
-- `python -m nylab run <csv> [--tz auto|ny+7|ny|utc|utc+N|eu] [--oos 0.3] [--out DIR]` reproduces
-  v0's whole pipeline (day table → 15 hypotheses → example model → report.html) plus two things
-  v0 didn't have: `summary.json` (ARCHITECTURE.md §6 schema) and a parquet cache
-  (`data/cache/bars_M5.parquet`, `days.parquet`).
-- `config/windows.yaml` holds the full SESSIONS_AND_CONTEXT.md §1 session table (used from Phase 5)
-  plus a `legacy_aliases` block so `nylab/days.py` stays a low-risk, near-verbatim port of v0's
-  `build_days()` — same column semantics, same numbers, just YAML-driven instead of a hardcoded dict.
-  `config/costs.yaml`, `config/models/london_sweep_reversal.yaml`, `config/prop.yaml` (Maven, see below)
-  added too.
-- `nylab/data/loader.py` auto-sniffs the CSV delimiter (`sep=None`) so it accepts both the
-  python-export format and MT5's tab-separated "Export Bars" format with `<DATE>`/`<TIME>` headers.
-- `nylab/data/timezones.py`: `auto`/`ny+7`/`ny`/`utc(+N)`/`eu` conversion + `sanity_check()` (red
-  flag if the volatility peak isn't inside 08:00–11:00 NY) — default is `ny+7` per Akash's request
-  (2026-09-24): the report warns instead of asking him to pick a mode.
-- `nylab/data/quality.py`: bar-interval/OHLC-integrity/duplicate/price-spike checks + per-day
-  thin/gappy flags (DATA_AND_TIME.md §5, §3). Reported in `summary.json["data_quality"]`, **not**
-  used to filter the day table yet (v0 didn't either — needed for exact parity).
-- `nylab/days.py`: `COLUMN_DOCS` dict documents `available_at_h` for all 86 DAY columns
-  (ROADMAP 1.6) — the mechanism Phase 3+ will use to structurally block look-ahead in hypotheses.
-- **Regression proof:** `tests/test_nylab_phase1.py` runs `python -m nylab run` on the clean 5y
-  fixture and diffs `days.csv` (all 86 columns), `trades.csv`, `hypotheses.csv` against the Phase 0
-  golden files — **all match within 1e-9 (in practice: exactly)**. Also: `summary.json` schema
-  check, a parquet cache round-trip, and an AT-03 look-ahead test on the `window()` helper (truncate
-  bars right after a window closes; the window's columns for that day must not change).
-- Bug found + fixed during this phase: `windows.yaml`'s `asia` session is stored already
-  h-relative (`[-4, 0]`, per SESSIONS_AND_CONTEXT.md §1), but `days.py` initially still applied
-  v0's old `-24` shift (needed only for v0's un-shifted `(20,24)` convention) — double-shifted
-  Asia out of range, all-NaN. Fixed in `nylab/days.py`; regression test now covers it.
-- Sanity re-run on the **planted** fixture through `nylab` (not just v0): finds the same 3
-  hypotheses as v0 did, same trade count (722), same numbers — informal extra confirmation the
-  port is faithful.
-- `pytest -q`: **11 passed** (5 from Phase 0 + 6 new).
-- `docs/ROADMAP.md` Phase 0 + Phase 1 checkboxes ticked.
+### Phase 2 — Replay trainer MVP: mostly done (see docs/ROADMAP.md for the per-ticket detail)
 
-## Repo changes made outside the roadmap tickets (context for the next session)
+**What works, right now, via `python -m nylab replay`:**
+- Local server (Python stdlib `http.server`, no Flask/FastAPI) + vendored `lightweight-charts`
+  v4.2.0 (Apache-2.0, from npm) at `nylab/replay/static/vendor/` — genuinely offline, zero
+  external requests from `index.html`.
+- Date picker (jumps instantly — cache is an in-memory dict, tested at <1s per jump average),
+  prev/next/random day (within the filtered list), start-time choice (17:00 prev / 02:00 / 07:00 /
+  09:30), previous 10 days of HTF context auto-loaded.
+- Day navigator table with live filters: date range, weekday checkboxes, "exclude thin days"
+  (default on), plus two quick filters (London high/low raided in NY) as a taste of what the
+  advanced DSL filter (Phase 6.1) will generalize. Presets save/load to `research/replay/presets.json`.
+- Playback: step 1 bar, step 1 hour, play/pause at 4 speeds, jump-to-time. Timeframe switch
+  M5/M15/H1/H4/D1, where every timeframe above M5 is a **server-side resample of only the bars
+  already revealed** — proven equal to a manual resample in `test_higher_tf_matches_resample_of_revealed_bars`.
+- Overlays: London/Asia high-low lines, PDH/PDL, midnight open, 09:30 open, small session-start
+  markers (label + time) for every session in SESSIONS_AND_CONTEXT.md §1. Blind mode hides the
+  day-table dates and the overlay lines.
+- Mock trading: BUY/SELL at market (fills at the last revealed bar's close — conservative, no
+  peeking), required SL, optional TP, live lot-size preview (risk % → lots, rounded down to 0.01),
+  the **same conservative same-bar fill rule** as the backtest engine (stop wins ties) implemented
+  once in `nylab/replay/sim.py` and called by both the API and (indirectly) tested against the
+  engine's R formula.
+- Maven account panel: balance, day P&L%, daily/max drawdown used vs. limit, green/amber(50%)/red(75%)
+  status, breach detection — reading live from `config/prop.yaml`'s verified account data.
+- Trade journal: every closed trade can be logged (setup tag, rules-followed Y/N, emotion 1-5,
+  notes) to `research/replay/trades.csv`, with a best-effort PNG chart screenshot saved to
+  `research/replay/shots/` (via `lightweight-charts`' own `takeScreenshot()`).
+- **No-leak proof:** `tests/test_replay_api.py` (11 tests) checks 100 random (day, until) pairs for
+  bars and levels never returning anything past `until`, checks every returned level's
+  `available_at_h` against `nylab.days.COLUMN_DOCS`, and cross-checks H1 resampling against a
+  manual pandas resample. `tests/test_replay_server_integration.py` (3 tests) actually launches
+  the real HTTP server as a subprocess and hits every route, including the static files.
+- `pytest -q`: **25 passed** (11 Phase 0/1 + 11 replay-logic + 3 server-integration).
 
-- `README.md` corrected for Cowork (not Claude Code) workflow; `docs/ARCHITECTURE.md` §1 naming
-  note (repo root `eurusd-lab/`, project name "EURUSD Session Research Lab").
-- Maven account rules (`config/prop.yaml`): verified from maventrading.com, not assumed. Akash
-  confirmed (2026-09-24) to go with the verified numbers over what CLAUDE.md originally guessed
-  (CLAUDE.md §1 still says +10%/+8% — not corrected there yet, low priority, see below). All 7
-  Maven programs captured as presets with sizes/targets/drawdown type; `akash_account_size: 5000`
-  set, program not yet confirmed (defaults to `standard_2step`). Phase 8's Maven pass simulator
-  will let him pick one or get an EV-based recommendation.
-- Git repo initialized in `eurusd-lab/` (wasn't one before); one commit per phase so far.
-- Delete permission was requested and granted for `C:\Trading` this session (needed to clean up
-  git/pip lock files that a locked-down connected folder can't remove on its own) — device_bash can
-  now delete inside that folder for the rest of this session.
+**What's explicitly NOT done yet (flagged in docs/ROADMAP.md, not silently skipped):**
+- Session **boxes** (shaded rectangles) — used small text markers instead; `lightweight-charts`
+  v4's free tier makes true shaded boxes more work than the markers, and markers convey the same
+  information (where each session starts). Can upgrade later if Akash wants the visual boxes.
+- **PWH/PWL** (previous week high/low) overlay — not built because `nylab/days.py` doesn't compute
+  a weekly high/low column *at all* yet (FEATURES_SPEC.md §1 lists it as a TODO, not something v0
+  had). Needs a small days.py addition before the overlay can exist.
+- **08:30 open** line — the data exists (`o0830` is in `COLUMN_DOCS`), just wasn't added to the
+  overlay list. Trivial to add.
+- Order types beyond "market, fills at last close": no limit/stop pending orders, no drag-to-move
+  SL/TP, no move-to-breakeven button, no partial close (25/50/75%), no Challenge mode. REPLAY_TRAINER.md
+  S9 acceptance item 4 ("a full mock trade — limit entry, SL, TP, BE move, partial — produces the
+  same R as the engine") is therefore only **partially** verified: the R-math itself is proven
+  identical to the engine's formula (`test_full_mock_trade_matches_engine_r_math`), but the
+  limit/BE/partial *mechanics* aren't implemented, so that specific acceptance item isn't fully met.
+- Drawing tools (horizontal line, rectangle, Fibonacci/OTE) — REPLAY_TRAINER.md §6, not started.
+- Stats tab (replay trades → expectancy/win-rate by setup/session) — REPLAY_TRAINER.md §8, not started.
+
+None of the above block using the trainer for its main job (picking a day, watching it unfold bar
+by bar, taking a practice trade, seeing the R and the account impact) — they're refinements listed
+in Phase 6 of the roadmap anyway (filters v2, BE/partial, challenge mode, review-mode overlays,
+drawing tools, stats tab). Flagging them now rather than checking boxes that aren't fully true.
+
+## How to run it
+
+1. Build/refresh the cache from your real data: `python -m nylab run data/EURUSD_M5_....csv`
+   (writes `data/cache/bars_M5.parquet` + `days.parquet`).
+2. `python -m nylab replay` — opens `http://127.0.0.1:8765` in your default browser.
+3. Nothing else needed; Ctrl+C in the terminal stops the server.
+
+## Repo changes made outside the roadmap tickets
+
+- Vendored `lightweight-charts.standalone.production.js` (v4.2.0, Apache-2.0) + its LICENSE file
+  into `nylab/replay/static/vendor/` — fetched via npm in the sandbox (Akash's own machine's
+  network doesn't reach unpkg/jsdelivr directly; npm's registry did work), then written into the
+  connected folder. No further internet access needed to run the trainer.
+- `.gitignore`: added `research/replay/{trades.csv,presets.json,drawings/,shots/}` and
+  `tests/fixtures/_replay_cache/` (test-only cache) as generated/runtime state, not source.
 
 ## Open questions for Akash (not blocking)
 
-1. Which Maven program did you actually buy? CLAUDE.md's stated targets (+10%/+8%) don't match
-   any verified program exactly. Not urgent — only matters once Phase 8 builds the pass simulator.
-2. Still unknown until a real MT5 export: your broker's actual server-time convention. Default
-   `ny+7` will be checked automatically by `sanity_check()`; only comes up if it warns.
-3. Cosmetic, not blocking: CLAUDE.md §1 itself still has the old +10%/+8% text — worth a quick
-   correction pass later so the doc and `config/prop.yaml` don't disagree on paper.
+Same three as after Phase 1 (Maven program confirmation, broker tz convention, CLAUDE.md's stale
++10%/+8% text) — nothing new this phase.
 
-## Next up: Phase 2 — Replay trainer MVP
+## Next up
 
-This is the user's first practical tool (usable before the rest of the research machinery).
-Needs: local HTTP server + vendored `lightweight-charts` (Apache-2.0, fetched once — needs
-internet somewhere, see README/CLAUDE.md §5a), date picker, day table with basic filters,
-playback controls, session-box overlays, mock trading + Maven account panel, no-leak API test.
-Akash's part: launching `python -m nylab replay` himself on Windows (opens his own browser) —
-a server I start in the sandbox/connected-folder shell can't reach his real browser. Nothing else
-needed from him to start.
+Two paths, Akash's call:
+(a) Close the Phase 2 gaps above (PWH/PWL column + overlay, 08:30 line, session boxes, limit/BE/
+    partial trading, challenge mode, drawing tools, stats tab) before moving on, or
+(b) Move to Phase 3 (hypothesis YAML + DSL + ledger + Bonferroni/BH) now and come back to the
+    replay trainer's remaining polish in Phase 6 as originally scheduled, since the roadmap already
+    plans a "Replay trainer v2" phase for exactly this list.
+Recommended: (b) — the roadmap already schedules this cleanup as Phase 6, and Phase 3 (the honest-
+stats ledger) is more valuable to build next than trainer polish.

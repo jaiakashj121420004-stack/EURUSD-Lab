@@ -22,6 +22,7 @@ from nylab.models import london_sweep_reversal as lsr
 from nylab.report import charts as charts_mod
 from nylab.report import html as html_mod
 from nylab.report import summary as summary_mod
+from nylab.replay import server as replay_server
 
 
 def _prepare_bars(csv_path: str, tz: str):
@@ -132,12 +133,18 @@ def main():
     p_run.add_argument("--no-cache", dest="no_cache", action="store_true")
     p_run.set_defaults(func=cmd_run)
 
+    p_replay = sub.add_parser("replay", help="launch the offline replay trainer (opens your browser)")
+    p_replay.add_argument("--cache-dir", dest="cache_dir", default="data/cache")
+    p_replay.add_argument("--host", default="127.0.0.1")
+    p_replay.add_argument("--port", type=int, default=8765)
+    p_replay.add_argument("--no-browser", dest="open_browser", action="store_false")
+    p_replay.set_defaults(func=lambda a: replay_server.serve(a.cache_dir, a.host, a.port, a.open_browser))
+
     for name, phase in [
         ("export", "Phase 9 (mt5_export.py at the repo root still works standalone today)"),
         ("calendar-import", "Phase 4"),
         ("hypothesis", "Phase 3"),
         ("snapshot", "Phase 8"),
-        ("replay", "Phase 2"),
     ]:
         p = sub.add_parser(name)
         p.set_defaults(func=_not_yet(name, phase))

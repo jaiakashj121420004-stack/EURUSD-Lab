@@ -33,14 +33,28 @@ After each phase, show the user a short demo/result summary before continuing.
 
 ## Phase 2 — Replay trainer MVP (2–4 days)  ← user's first practical tool
 Spec: REPLAY_TRAINER.md.
-- [ ] 2.1 Server + vendored lightweight-charts; `python -m nylab replay`; offline.
-- [ ] 2.2 Date picker, prev/next day, random day, start-time choice, previous 10 days of context loaded.
-- [ ] 2.3 Day table with **basic filters**: date range, weekday, month/year, thin-day exclusion.
-- [ ] 2.4 Playback: +1 bar, +1 hour, play/speeds, jump-to-time. TFs M5/M15/H1/H4/D1 from revealed bars.
-- [ ] 2.5 Overlays: session boxes (all sessions), Asia/London H/L, PDH/PDL, PWH/PWL, opens.
-- [ ] 2.6 Mock trading + Maven account panel + journal CSV + screenshots.
-- [ ] 2.7 No-leak API test.
-**Accept:** REPLAY_TRAINER §9 items 1, 3, 4, 5, 6.
+- [x] 2.1 Server + vendored lightweight-charts; `python -m nylab replay`; offline.
+- [x] 2.2 Date picker, prev/next day, random day, start-time choice, previous 10 days of context loaded.
+- [x] 2.3 Day table with **basic filters**: date range, weekday, thin-day exclusion. (No dedicated
+      month/year quick-picker -- the date-range filter covers the same need; can add if Akash wants it.)
+- [x] 2.4 Playback: +1 bar, +1 hour, play/speeds, jump-to-time. TFs M5/M15/H1/H4/D1 from revealed bars.
+- [~] 2.5 Overlays: **done** -- London/Asia H/L, PDH/PDL, midnight & 09:30 opens, session-start markers
+      (label + time, not shaded boxes). **Not done** -- PWH/PWL (nylab doesn't compute a weekly
+      high/low column yet at all, session-level or day-level), 08:30 open line, true shaded session
+      boxes (markers used instead).
+- [~] 2.6 Mock trading: **done** -- market-style entry, SL/TP, conservative same-bar fill, R math
+      (verified against the backtest engine's formula), Maven account panel (daily/max DD, breach
+      colour states), trade journal appended to `research/replay/trades.csv`, best-effort chart
+      screenshot on journal save. **Not done** -- limit/stop entry types (only market-style "fill at
+      last revealed close"), drag SL/TP, move-to-breakeven, partial close, challenge mode (Phase 6.6).
+- [x] 2.7 No-leak API test -- bars, levels (available_at_h), day filters, HTF-resample-equals-revealed-
+      bars, plus a full subprocess integration test hitting the real HTTP server.
+**Accept:** REPLAY_TRAINER §9 -- item 1 (date jump, tested < 1s avg), item 3 (no-leak + resample,
+tested), item 5 (Maven daily breach, tested), item 6 (offline by construction: stdlib http.server +
+locally vendored JS, zero external requests in index.html) all hold. Item 4 partially holds: the
+R-math for a market-style trade with SL/TP is proven identical to the backtest engine's formula
+(tested), but "limit entry ... BE move, partial" isn't built yet (see 2.6) -- flagged for Akash,
+not silently declared done.
 
 ## Phase 3 — Ledger, hypothesis YAML, honest stats (1–2 days)
 - [ ] 3.1 Hypothesis YAML + safe DSL (supports `day.x` and `<session>.x` dotted access).

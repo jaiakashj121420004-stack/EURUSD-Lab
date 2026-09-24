@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>EURUSD Session Research Lab -- Replay Trainer</title>
+<link rel="stylesheet" href="style.css">
+<script src="vendor/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<header id="topbar">
+  <div class="group">
+    <input type="date" id="datePicker">
+    <button id="prevDay" title="Previous filtered day">&#9664; prev</button>
+    <button id="nextDay" title="Next filtered day">next &#9654;</button>
+    <button id="randomDay" title="Random filtered day">&#127922; random</button>
+  </div>
+  <div class="group">
+    <label>Start at</label>
+    <select id="startAt">
+      <option value="-7">17:00 prev (full context)</option>
+      <option value="2">02:00 (London open)</option>
+      <option value="7" selected>07:00 (NY AM open)</option>
+      <option value="9.5">09:30 (NY cash open)</option>
+    </select>
+  </div>
+  <div class="group">
+    <label>TF</label>
+    <select id="tf">
+      <option>M5</option><option>M15</option><option>H1</option><option>H4</option><option>D1</option>
+    </select>
+  </div>
+  <div class="group">
+    <label><input type="checkbox" id="blindMode"> Blind mode</label>
+    <label><input type="checkbox" id="darkToggle" checked> Dark</label>
+  </div>
+</header>
+
+<div id="layout">
+  <aside id="navigator">
+    <div id="filters">
+      <h3>Filters <span id="matchCount" class="muted"></span></h3>
+      <label>From <input type="date" id="fFrom"></label>
+      <label>To <input type="date" id="fTo"></label>
+      <div id="fWeekdays">
+        <label><input type="checkbox" value="0" checked>Mon</label>
+        <label><input type="checkbox" value="1" checked>Tue</label>
+        <label><input type="checkbox" value="2" checked>Wed</label>
+        <label><input type="checkbox" value="3" checked>Thu</label>
+        <label><input type="checkbox" value="4" checked>Fri</label>
+      </div>
+      <label><input type="checkbox" id="fExcludeThin" checked> Exclude thin/holiday days</label>
+      <label><input type="checkbox" id="fLonHigh"> London high raided in NY</label>
+      <label><input type="checkbox" id="fLonLow"> London low raided in NY</label>
+      <div class="presetRow">
+        <select id="presetSelect"><option value="">-- load preset --</option></select>
+        <button id="savePreset">save current as preset</button>
+      </div>
+    </div>
+    <div id="dayTableWrap">
+      <table id="dayTable">
+        <thead><tr><th>Date</th><th>Day</th><th>NY rng</th><th>Lon rng</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </aside>
+
+  <main id="chartArea">
+    <div id="chart"></div>
+    <div id="playbar">
+      <button id="stepBack" title="Step back (review mode only)">&#9664;1</button>
+      <button id="stepFwd" title="Reveal next bar">1&#9654;</button>
+      <button id="stepHour">+1h</button>
+      <button id="playPause">&#9654; play</button>
+      <select id="speed"><option value="1000">1/s</option><option value="500">2/s</option><option value="200">5/s</option><option value="50">20/s</option></select>
+      <input type="time" id="jumpTime" step="60">
+      <button id="jumpBtn">jump</button>
+      <span id="clockLabel" class="muted"></span>
+    </div>
+  </main>
+
+  <aside id="accountPanel">
+    <h3>Maven account</h3>
+    <div id="acctSummary"></div>
+    <hr>
+    <h3>Order ticket</h3>
+    <div id="ticket">
+      <label>Side
+        <select id="side"><option value="long">BUY</option><option value="short">SELL</option></select>
+      </label>
+      <label>Risk % <input type="number" id="riskPct" value="0.5" step="0.1" min="0.1"></label>
+      <label>SL <input type="number" id="slInput" step="0.00001"></label>
+      <label>TP <input type="number" id="tpInput" step="0.00001"></label>
+      <div id="lotsPreview" class="muted"></div>
+      <button id="openTradeBtn">Open trade</button>
+      <button id="closeTradeBtn" disabled>Close trade</button>
+    </div>
+    <div id="openTradeInfo"></div>
+    <hr>
+    <h3>Journal (last trade)</h3>
+    <div id="journalForm">
+      <label>Setup tag <input type="text" id="setupTag" placeholder="london_sweep_reversal"></label>
+      <label>Rules followed?
+        <select id="rulesFollowed"><option value="Y">Y</option><option value="N">N</option></select>
+      </label>
+      <label>Emotion (1-5) <input type="number" id="emotion" min="1" max="5" value="3"></label>
+      <label>Notes <textarea id="notes" rows="2"></textarea></label>
+      <button id="saveJournalBtn" disabled>Save to journal + screenshot</button>
+    </div>
+    <p class="muted footnote">Not financial advice. Practice tool only -- read-only against MT5.</p>
+  </aside>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

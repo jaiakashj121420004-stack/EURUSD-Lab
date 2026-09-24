@@ -1,0 +1,47 @@
+:root {
+  --bg: #0f1420; --panel: #161c2c; --border: #2a3348; --text: #dbe2f0; --muted: #7f8bab;
+  --accent: #4f8cff; --green: #22b07d; --red: #e0526a; --amber: #d9a441;
+}
+body.light {
+  --bg: #f4f6fb; --panel: #ffffff; --border: #dde3ef; --text: #1a2130; --muted: #6b7590;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, Segoe UI, Inter, Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 13px; }
+.muted { color: var(--muted); font-size: 12px; }
+button { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .4; cursor: default; }
+input, select, textarea { background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 3px 6px; }
+label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; margin-bottom: 6px; }
+h3 { margin: 6px 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+#topbar { display: flex; gap: 18px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
+#topbar .group { display: flex; gap: 6px; align-items: center; }
+
+#layout { display: grid; grid-template-columns: 300px 1fr 260px; height: calc(100vh - 49px); }
+#navigator { border-right: 1px solid var(--border); padding: 10px; overflow-y: auto; }
+#filters label { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+#fWeekdays { display: flex; gap: 8px; margin-bottom: 6px; }
+#fWeekdays label { flex-direction: row; }
+.presetRow { display: flex; gap: 6px; margin: 8px 0; }
+#dayTableWrap { max-height: 60vh; overflow-y: auto; margin-top: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+tr.dayRow { cursor: pointer; }
+tr.dayRow:hover { background: rgba(79,140,255,.12); }
+tr.dayRow.active { background: rgba(79,140,255,.25); }
+tr.dayRow.spoiler td { opacity: .5; }
+
+#chartArea { display: flex; flex-direction: column; }
+#chart { flex: 1; }
+#playbar { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--panel); }
+
+#accountPanel { border-left: 1px solid var(--border); padding: 10px; overflow-y: auto; }
+#acctSummary .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.badge { padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.badge.green { background: rgba(34,176,125,.2); color: var(--green); }
+.badge.amber { background: rgba(217,164,65,.2); color: var(--amber); }
+.badge.red { background: rgba(224,82,106,.2); color: var(--red); }
+#lotsPreview { margin: 4px 0 8px; }
+#openTradeInfo { margin-top: 8px; font-size: 12px; }
+.footnote { margin-top: 16px; line-height: 1.4; }
