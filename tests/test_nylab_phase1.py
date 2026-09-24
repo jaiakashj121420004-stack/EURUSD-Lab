@@ -21,7 +21,8 @@ def nylab_run(tmp_path_factory):
     out = tmp_path_factory.mktemp("nylab_phase1_run")
     subprocess.run(
         [sys.executable, "-m", "nylab", "run", str(FIXTURE), "--tz", "ny+7",
-         "--out", str(out), "--run-id", "phase1_test", "--no-cache"],
+         "--out", str(out), "--run-id", "phase1_test", "--no-cache",
+         "--ledger-path", str(out / "ledger.csv")],  # isolated -- never touch the repo's real ledger
         cwd=ROOT, check=True, capture_output=True, text=True,
     )
     return out
@@ -67,9 +68,18 @@ def test_trades_csv_matches_golden(nylab_run):
 
 
 def test_hypotheses_csv_matches_golden(nylab_run):
+    """v0 parity for the SUBSTANTIVE numbers (Phase 3 replaced v0's hardcoded significance/
+    verdict logic with the real YAML+DSL+ledger+Bonferroni/BH engine -- see
+    docs/PROGRESS.md's Phase 3 section -- so the columns and verdict methodology are new by
+    design; only the underlying per-hypothesis sample counts and hit rates must still match
+    v0 exactly, since those come from the SAME 15 conditions evaluated on the SAME data)."""
     gold = pd.read_csv(GOLDEN / "hypotheses.csv")
     new = pd.read_csv(nylab_run / "hypotheses.csv")
-    assert gold.equals(new)
+    assert len(gold) == len(new) == 15
+    for col in ("n", "hit", "baseline", "is_hit", "oos_hit", "oos_n"):
+        diff = (gold[col].astype(float) - new[col].astype(float)).abs()
+        ok = (diff <= 1e-9) | (gold[col].isna() & new[col].isna())
+        assert ok.all(), f"{col} diverged from v0 golden at row(s) {list(diff[~ok].index)}"
 
 
 def test_summary_json_written(nylab_run):

@@ -1,0 +1,9 @@
+id: H014
+version: '1.0'
+title: Asia range in bottom 20% -> NY range above its median
+decision_time_h: 0
+condition: asia_range < quantile(asia_range, 0.2)
+outcome: ny_range > median(ny_range)
+baseline: ny_range > median(ny_range)
+notes: Ported verbatim from v0/nylab.hypotheses H014. decision_time_h=0 -- asia_range
+  is fully known right at the day's midnight-NY mark.

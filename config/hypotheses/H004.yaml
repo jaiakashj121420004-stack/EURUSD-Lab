@@ -1,0 +1,8 @@
+id: H004
+version: '1.0'
+title: 09:30 above midnight open (premium) -> NY drive down
+decision_time_h: 9.5
+condition: o0930 > mid_open
+outcome: ny_drive < 0
+baseline: ny_drive < 0
+notes: Ported verbatim from v0/nylab.hypotheses H004.

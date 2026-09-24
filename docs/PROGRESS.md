@@ -3,7 +3,13 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 2 (replay trainer) done, including the gap-close pass Akash asked for. Ready for Phase 3.
+## Status: Phase 3 (ledger + honest stats) done. Ready for Phase 4.
+
+Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
+call: keep building through the phases on the automated tests alone, and he'll sit down and look
+at everything (replay trainer included) once more of the pipeline exists. So: I keep running and
+rigorously honoring every test I write (he was explicit about this), and don't wait on his manual
+review to keep moving. Nothing here has been eyeballed by him yet -- flagged wherever it matters.
 
 ### Phase 0 — done. Phase 1 — done.
 See the git log for full detail; summary: v0 golden baseline captured, `nylab/` package built
@@ -101,6 +107,65 @@ guessing.
 - `.gitignore`: added `research/replay/{trades.csv,presets.json,drawings/,shots/}` and
   `tests/fixtures/_replay_cache/` (test-only cache) as generated/runtime state, not source.
 
+### Phase 3 — Ledger, hypothesis YAML, honest stats: done
+
+**What's new:**
+- `nylab/hyp_dsl.py` -- the safe condition/outcome/baseline evaluator. Never calls `eval()`/
+  `exec()`: parses with `ast.parse` (parsing alone runs nothing) then walks the tree by hand
+  through a whitelist (comparisons, `and`/`or`/`not`, `+-*/`, and exactly 3 functions -- `abs`,
+  `quantile`, `median`). Dotted convenience syntax (`lon.high`, `day.open`) is a text-level
+  rewrite to the day table's own column names BEFORE parsing, so `a.__class__`-style attribute
+  tricks never reach an actual `ast.Attribute` node -- they just become a nonsense flat name
+  that fails as "unknown column" at evaluate time. 16 tests, including a battery of rejected
+  strings (`__import__`, `os.system`, `lambda`, list comprehensions, `open(...)`, `eval(...)`).
+- `config/hypotheses/H001.yaml`..`H015.yaml` -- v0's 15 hypotheses, ported. Verified their
+  sample counts and hit rates match the v0 golden output exactly (n, hit, baseline, IS/OOS hit,
+  OOS n all within 1e-9) -- only the significance/verdict layer around them is new.
+- `nylab/hyp_loader.py` -- loads the YAML, validates every expression against the DSL's
+  whitelist, and REFUSES to load a hypothesis whose `condition` uses a column not yet known by
+  its `decision_time_h` (checked against `nylab.days.COLUMN_DOCS`, dotted syntax included). 8
+  tests, including one confirming the dotted form is checked exactly like the flat form (so
+  dotted syntax can't be used to sneak a too-late column past the loader).
+- `nylab/ledger.py` -- the append-only `research/ledger.csv`, `m` (distinct id+version pairs
+  ever logged -- re-running unchanged doesn't inflate it, bumping version does), Bonferroni
+  alpha, and a from-scratch Benjamini-Hochberg step-up implementation (checked against a
+  hand-computed textbook example). 8 tests.
+- `nylab/hyp_engine.py` -- runs the loaded hypotheses against the day table, computing the same
+  Wilson CI / z-test stats as before, now via Bonferroni AND BH (global + per-family), and
+  assigning RESEARCH_PROTOCOL.md §9's actual verdict vocabulary (`noise`/`weak`/`candidate`/
+  `survives-oos`/`not proven`) instead of v0's two-way `bonferroni_sig`/`oos_holds` flags.
+- `python -m nylab hypothesis add H016 "..." --decision-time-h 9.5` scaffolds a new YAML with
+  TODO placeholders that the loader will refuse until they're filled in with real expressions.
+- `python -m nylab run` now runs entirely through this pipeline and appends to
+  `research/ledger.csv` on every run (pass `--ledger-path` to point elsewhere, e.g. for tests).
+
+**A methodology finding worth recording (this is exactly the kind of thing RESEARCH_PROTOCOL.md
+exists to catch, so it's written up in full rather than quietly patched):** RESEARCH_PROTOCOL.md
+§4 reads as "`survives-oos` needs Bonferroni-on-IS OR BH, plus an OOS result confirming it." I
+implemented that literally, then ran AT-01 (docs/ROADMAP.md's own global test: on the clean/
+no-edge fixture, zero hypotheses may reach `survives-oos`) against it -- and it failed. One of
+the 15 old hypotheses (H013, about ADR usage) got flagged as a confirmed finding on data that
+has NO real edge by construction. Cause: BH is deliberately lenient -- at its 10% false-discovery
+rate setting across 15 tests, roughly 1-in-10 null hypotheses are EXPECTED to pass it by chance,
+and this run's random seed happened to produce exactly one that also had its IS and OOS halves
+agree by coincidence. That's not a bug in the arithmetic; it's BH doing exactly what a 10% FDR
+setting promises. Brought this to Akash; his call (recommended, and what's now built): `survives-
+oos` is reserved for the STRICT Bonferroni-on-IS route only. A BH-only pass, even with OOS
+confirmation, is labeled `candidate` -- worth a second look, not a proven finding. AT-01 now
+holds cleanly under this rule (`tests/test_hyp_engine_at.py`). AT-02 (the planted-edge fixture)
+needed the 5-year fixture rather than 2-year: H005's real, deliberately-planted edge clears
+Bonferroni on 5 years of data; on 2 years it doesn't have quite enough samples to, even though
+its raw hit rate (0.73) already clears the 0.58 bar on its own. Both are now tested.
+
+**Test count:** 66 passed (was 31 after Phase 2's gap-close; +16 DSL, +8 loader, +8 ledger, +3
+AT-01/AT-02 acceptance).
+
+**Not done, correctly out of scope for Phase 3:** walk-forward validation (Phase 7+), the
+robustness battery (cost sensitivity, entry-delay, per-year, Monte Carlo -- RESEARCH_PROTOCOL
+§5.4, applies to MODELS not hypotheses, Phase 7+), forward testing (§7, Phase 9+), kill criteria
+enforcement (§8, needs a running forward test to kill). None of these apply yet -- there's no
+model survives-oos to subject them to.
+
 ## Open questions for Akash (not blocking)
 
 Same three as after Phase 1 (Maven program confirmation, broker tz convention, CLAUDE.md's stale
@@ -108,13 +173,13 @@ Same three as after Phase 1 (Maven program confirmation, broker tz convention, C
 
 ## Next up
 
-Moving to **Phase 3 — Ledger, hypothesis YAML, honest stats** per Akash's go-ahead: hypothesis
-YAML + safe DSL, porting v0's 15 hypotheses (H001-H015), look-ahead rejection by decision_time_h,
-an append-only ledger with Bonferroni + Benjamini-Hochberg correction (global and per family) and
-Wilson confidence intervals, and a `hypothesis add` scaffold. Acceptance target: AT-01 and AT-02 on
-the single-session planted-edge fixture.
+Moving to **Phase 4 — Economic calendar** (SESSIONS_AND_CONTEXT.md §4): an MQL5 read-only export
+script (with step-by-step MetaEditor instructions, given one at a time, when Akash actually needs
+to run something -- his standing request), `nylab calendar-import`, surprise z-scores, event
+families, and per-session/per-day news availability rules. Acceptance target: on Akash's real
+data, NFP lands at 08:30 NY in both summer and winter, FOMC at 14:00.
 
-The project has 11 phases total (0 through 10): 0 Reproduce v0, 1 Package refactor, 2 Replay
-trainer MVP (done), 3 Ledger/hypothesis stats (next), 4 Economic calendar, 5 All sessions + session
-character, 6 Replay trainer v2 (the deferred items above land here), 7 ICT features & models,
-8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).
+The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
+2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (next), 5 All
+sessions + session character, 6 Replay trainer v2, 7 ICT features & models, 8 Verification/
+robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).

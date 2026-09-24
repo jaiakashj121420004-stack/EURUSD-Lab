@@ -1,0 +1,8 @@
+id: H001
+version: '1.0'
+title: London KZ bullish -> NY drive (09:30-16:00) up
+decision_time_h: 5
+condition: lon_dir > 0
+outcome: ny_drive > 0
+baseline: ny_drive > 0
+notes: Ported verbatim from v0/nylab.hypotheses H001.

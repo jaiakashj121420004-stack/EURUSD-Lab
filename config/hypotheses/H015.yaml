@@ -1,0 +1,10 @@
+id: H015
+version: '1.0'
+title: NY raids London high -> NY closes back below it
+decision_time_h: 16
+condition: ny_takes_lon_high
+outcome: ny_close < lon_high
+baseline_p0: 0.5
+notes: Ported from v0/nylab.hypotheses H015. v0 special-cased this hypothesis's baseline
+  to a literal 50% coin-flip null rather than deriving one from a column -- baseline_p0
+  makes that explicit instead of re-deriving it from an expression.

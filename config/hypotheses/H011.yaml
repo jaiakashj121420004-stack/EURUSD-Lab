@@ -1,0 +1,9 @@
+id: H011
+version: '1.0'
+title: Previous day up -> NY drive up
+decision_time_h: -7
+condition: prev_day_dir > 0
+outcome: ny_drive > 0
+baseline: ny_drive > 0
+notes: Ported verbatim from v0/nylab.hypotheses H011. decision_time_h=-7 because prev_day_dir
+  is already fully known at the start of the trading day.

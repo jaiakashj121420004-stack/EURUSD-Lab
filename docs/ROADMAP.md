@@ -72,11 +72,40 @@ so `tests/test_nylab_phase1.py::test_days_csv_matches_golden` was loosened from 
 to "every v0 column still present and unchanged" -- it still fails if any v0-era number drifts.
 
 ## Phase 3 — Ledger, hypothesis YAML, honest stats (1–2 days)
-- [ ] 3.1 Hypothesis YAML + safe DSL (supports `day.x` and `<session>.x` dotted access).
-- [ ] 3.2 Port v0's 15 hypotheses (H001–H015). 3.3 Look-ahead rejection by decision_time_h.
-- [ ] 3.4 Append-only ledger; `m`; families. 3.5 Bonferroni + BH (global and per family); Wilson CIs.
-- [ ] 3.6 `hypothesis add` scaffold.
-**Accept:** AT-01, AT-02 (single-session planted edge).
+- [x] 3.1 Hypothesis YAML + safe DSL (`nylab/hyp_dsl.py`) -- supports `day.x` and `<session>.x`
+      dotted access (text-level rewrite to the day table's own flat column names, e.g. `lon.high`
+      -> `lon_high`) as well as flat names directly. NEVER calls Python's `eval()`/`exec()`: parses
+      with `ast.parse` (inert) then walks the tree by hand through a whitelist of node types and
+      exactly 3 functions (`abs`, `quantile`, `median`) -- anything else (attribute access,
+      comprehensions, arbitrary calls, `__import__`, ...) is rejected before it can run.
+- [x] 3.2 Ported v0's 15 hypotheses verbatim as `config/hypotheses/H001.yaml`..`H015.yaml`
+      (ARCHITECTURE.md §5 schema). Verified byte-identical sample counts/hit-rates against the v0
+      golden output (n, hit, baseline, IS hit, OOS hit, OOS n all match to 1e-9) -- only the
+      significance/verdict machinery around them changed. H015 needed a `baseline_p0: 0.5` literal
+      override (new field) since v0 special-cased that one hypothesis to a fixed 50% null rather
+      than deriving a baseline from a column.
+      3.3 Look-ahead rejection (`nylab/hyp_loader.py`) -- refuses to load a hypothesis whose
+      `condition` references a column with `available_at_h > decision_time_h`, checked against
+      `nylab.days.COLUMN_DOCS`, dotted syntax included. Only `condition` is checked; `outcome`/
+      `baseline` describe the future result being tested, so a later `available_at_h` there is
+      the point, not a leak.
+- [x] 3.4 Append-only ledger (`nylab/ledger.py`, `research/ledger.csv`) -- `m` = distinct (id,
+      version) pairs ever logged; re-running an unchanged hypothesis doesn't increase it, bumping
+      `version` does. Family grouping supported (`family:` field) for Phase 5's cross-session work.
+      3.5 Bonferroni (`0.05/m`) + Benjamini-Hochberg (10% FDR, global AND per-family) + Wilson CIs
+      (`nylab/hyp_engine.py`, reusing `nylab.stats`).
+- [x] 3.6 `python -m nylab hypothesis add <id> <title> --decision-time-h <h>` scaffolds a new YAML
+      template with TODO placeholders -- the loader refuses it until real expressions replace them.
+**Accept:** AT-01 and AT-02 both hold, tested (`tests/test_hyp_engine_at.py`) -- but getting there
+surfaced a real methodology gap, written up in docs/PROGRESS.md's Phase 3 section: RESEARCH_
+PROTOCOL.md's literal "Bonferroni-on-IS or BH, plus OOS confirmation" rule for `survives-oos` let
+one hypothesis (H013) falsely reach that verdict on the CLEAN fixture -- an expected side effect of
+BH's 10%-false-discovery-rate design at m=15, not a bug in the arithmetic. Akash's call: `survives-
+oos` is now reserved for the strict Bonferroni-on-IS route only; a BH-only pass with OOS
+confirmation is labeled `candidate` instead. AT-01 holds cleanly under this rule; AT-02 needed the
+5-year planted fixture rather than 2-year (H005's real, deliberately-planted 9-pip edge clears
+Bonferroni there; it doesn't quite have enough samples to on the 2-year fixture even though its raw
+hit rate already clears the 0.58 bar).
 
 ## Phase 4 — Economic calendar (1–2 days)
 Spec: SESSIONS_AND_CONTEXT §4.

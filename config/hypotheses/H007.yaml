@@ -1,0 +1,8 @@
+id: H007
+version: '1.0'
+title: Pre-NY raids PDH -> NY drive down
+decision_time_h: 9.5
+condition: pre_takes_pdh and not pre_takes_pdl
+outcome: ny_drive < 0
+baseline: ny_drive < 0
+notes: Ported verbatim from v0/nylab.hypotheses H007.

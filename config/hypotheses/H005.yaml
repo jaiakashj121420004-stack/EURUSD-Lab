@@ -1,0 +1,9 @@
+id: H005
+version: '1.0'
+title: Pre-NY (07:00-09:30) raids London high only -> NY drive down
+decision_time_h: 9.5
+condition: pre_takes_lon_high and not pre_takes_lon_low
+outcome: ny_drive < 0
+baseline: ny_drive < 0
+notes: Ported verbatim from v0/nylab.hypotheses H005. AT-02's planted edge targets
+  exactly this condition (see tests/fixtures/make_synth.py's plant_edge()).

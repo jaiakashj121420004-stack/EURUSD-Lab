@@ -1,0 +1,8 @@
+id: H012
+version: '1.0'
+title: Previous day down -> NY drive down
+decision_time_h: -7
+condition: prev_day_dir < 0
+outcome: ny_drive < 0
+baseline: ny_drive < 0
+notes: Ported verbatim from v0/nylab.hypotheses H012.

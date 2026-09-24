@@ -1,0 +1,8 @@
+id: H013
+version: '1.0'
+title: ADR used by 09:30 > 80% -> NY range below its median
+decision_time_h: 9.5
+condition: adr_used_0930 > 0.8
+outcome: ny_range < median(ny_range)
+baseline: ny_range < median(ny_range)
+notes: Ported verbatim from v0/nylab.hypotheses H013.

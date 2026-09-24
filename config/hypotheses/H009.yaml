@@ -1,0 +1,8 @@
+id: H009
+version: '1.0'
+title: 08:30-09:30 up (news hour) -> NY drive down (Judas)
+decision_time_h: 9.5
+condition: newshr_dir > 0
+outcome: ny_drive < 0
+baseline: ny_drive < 0
+notes: Ported verbatim from v0/nylab.hypotheses H009.

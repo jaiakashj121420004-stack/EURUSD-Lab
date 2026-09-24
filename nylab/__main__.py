@@ -15,7 +15,8 @@ import pandas as pd
 from nylab import cache as cache_mod
 from nylab import config as cfg
 from nylab import days as days_mod
-from nylab import hypotheses as hyp_mod
+from nylab import hyp_engine, hyp_loader
+from nylab import ledger as ledger_mod
 from nylab import stats as stats_mod
 from nylab.data import loader, quality, timezones
 from nylab.models import london_sweep_reversal as lsr
@@ -60,7 +61,11 @@ def cmd_run(args):
     split_date = d.index[int(len(d) * (1 - args.oos))]
     print(f"  {len(d)} trading days  |  out-of-sample from {split_date:%Y-%m-%d}")
 
-    H, m = hyp_mod.evaluate(d, split_date)
+    run_id = args.run_id or datetime.now().strftime("%Y%m%d-%H%M")
+    hyps = hyp_loader.load_all()
+    ledger_path = args.ledger_path  # ARCHITECTURE.md S1: the repo-level ledger, append-only across runs
+    H, ledger_rows, m, bonf_alpha = hyp_engine.evaluate(d, hyps, split_date, run_id=run_id,
+                                                         ledger_path=ledger_path)
 
     model_params = dict(model_cfg.params)
     model_params["default_cost_pips"] = costs.default_cost_pips
@@ -69,7 +74,6 @@ def cmd_run(args):
     st_is = stats_mod.r_stats(trades[trades.td < split_date].R_net) if len(trades) else {"n": 0}
     st_oos = stats_mod.r_stats(trades[trades.td >= split_date].R_net) if len(trades) else {"n": 0}
 
-    run_id = args.run_id or datetime.now().strftime("%Y%m%d-%H%M")
     out_dir = args.out or os.path.join("reports", run_id)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -95,9 +99,11 @@ def cmd_run(args):
             verdict="promising" if st_oos.get("n", 0) and st_oos.get("ci_lo", -1) > 0 else "not proven",
         )
 
-    summ = summary_mod.build(run_id, meta, tz_check, H, m, model_stats)
+    summ = summary_mod.build(run_id, meta, tz_check, H, m, model_stats, bonferroni_alpha=bonf_alpha)
     summ["data_quality"] = dq
     summary_mod.write(summ, os.path.join(out_dir, "summary.json"))
+
+    ledger_mod.append(ledger_rows, path=ledger_path)
 
     if not args.no_cache:
         cache_mod.save(df, d, cache_dir=args.cache_dir)
@@ -110,6 +116,36 @@ def cmd_run(args):
               f"(CI {st_oos.get('ci_lo', float('nan')):+.2f} to {st_oos.get('ci_hi', float('nan')):+.2f})")
     print(f"\nReport:  {os.path.abspath(os.path.join(out_dir, 'report.html'))}")
     print(f"Summary: {os.path.abspath(os.path.join(out_dir, 'summary.json'))}")
+
+
+def cmd_hypothesis_add(args):
+    """ROADMAP 3.6: scaffold a new hypothesis YAML from a template, so adding an idea is
+    'fill in a form', not 'write Python and risk a look-ahead bug'. Deliberately writes
+    condition/outcome/baseline as TODO placeholders rather than guessing -- nylab.hyp_loader
+    will refuse to load them until they're real expressions."""
+    path = os.path.join(args.directory, f"{args.id}.yaml")
+    if os.path.exists(path):
+        sys.exit(f"{path} already exists -- bump the version inside it instead of overwriting "
+                  f"(RESEARCH_PROTOCOL.md S4: changing a hypothesis's definition is a new version, "
+                  f"counted in m; re-running an unchanged one is not).")
+    os.makedirs(args.directory, exist_ok=True)
+    template = f"""id: {args.id}
+version: "1.0"
+title: "{args.title}"
+codex_ref: ""
+decision_time_h: {args.decision_time_h}
+condition: "TODO -- a column/expression known by decision_time_h (see docs/FEATURES_SPEC.md, nylab.days.COLUMN_DOCS)"
+outcome: "TODO -- the future result being tested"
+baseline: "TODO -- same outcome expression, evaluated over ALL eligible days"
+min_n: 60
+notes: ""
+"""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(template)
+    print(f"Wrote {path}. Fill in condition/outcome/baseline, then it'll load and run alongside "
+          f"the others next time you run `python -m nylab run`. It will be REJECTED at load time "
+          f"if its condition uses a column not yet known by decision_time_h={args.decision_time_h} "
+          f"(RESEARCH_PROTOCOL.md S3).")
 
 
 def _not_yet(name, phase):
@@ -131,6 +167,8 @@ def main():
     p_run.add_argument("--run-id", dest="run_id", default=None)
     p_run.add_argument("--cache-dir", dest="cache_dir", default="data/cache")
     p_run.add_argument("--no-cache", dest="no_cache", action="store_true")
+    p_run.add_argument("--ledger-path", dest="ledger_path", default="research/ledger.csv",
+                        help="append-only multiple-testing ledger (RESEARCH_PROTOCOL.md S4)")
     p_run.set_defaults(func=cmd_run)
 
     p_replay = sub.add_parser("replay", help="launch the offline replay trainer (opens your browser)")
@@ -140,10 +178,19 @@ def main():
     p_replay.add_argument("--no-browser", dest="open_browser", action="store_false")
     p_replay.set_defaults(func=lambda a: replay_server.serve(a.cache_dir, a.host, a.port, a.open_browser))
 
+    p_hyp = sub.add_parser("hypothesis", help="scaffold a new hypothesis YAML file (ROADMAP 3.6)")
+    hyp_sub = p_hyp.add_subparsers(dest="hyp_command", required=True)
+    p_hyp_add = hyp_sub.add_parser("add", help="write config/hypotheses/<id>.yaml from a template")
+    p_hyp_add.add_argument("id", help="e.g. H016")
+    p_hyp_add.add_argument("title", help="plain-English one-line description")
+    p_hyp_add.add_argument("--decision-time-h", dest="decision_time_h", type=float, required=True,
+                            help="NY hour (relative to td midnight) by which the condition must be decidable")
+    p_hyp_add.add_argument("--dir", dest="directory", default="config/hypotheses")
+    p_hyp_add.set_defaults(func=cmd_hypothesis_add)
+
     for name, phase in [
         ("export", "Phase 9 (mt5_export.py at the repo root still works standalone today)"),
         ("calendar-import", "Phase 4"),
-        ("hypothesis", "Phase 3"),
         ("snapshot", "Phase 8"),
     ]:
         p = sub.add_parser(name)
