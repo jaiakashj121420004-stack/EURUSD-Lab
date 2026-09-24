@@ -1,0 +1,15 @@
+# Windows / Python
+.venv/
+.venv_unused_ignore/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data & regenerable synthetic fixtures (big; make_synth.py regenerates them deterministically)
+data/
+tests/fixtures/*.csv
+
+# Reports & research state (grow over time; not source)
+reports/
+research/replay/shots/
+ny_lab_report/

@@ -1,0 +1,9 @@
+# EURUSD Session Research Lab -- Windows requirements (run via setup.bat)
+MetaTrader5>=5.0.45   # Windows only; talks to your running MT5 terminal (read-only use)
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+pyyaml>=6.0
+pytest>=7.4
+pyarrow>=14.0          # parquet cache for bars/days (Phase 1+)
+mplfinance>=0.12       # trade/day chart snapshots (Phase 8)
