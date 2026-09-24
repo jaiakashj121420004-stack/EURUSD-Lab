@@ -6,7 +6,7 @@ __pycache__/
 .pytest_cache/
 
 # Data & regenerable synthetic fixtures (big; make_synth.py regenerates them deterministically)
-data/
+/data/
 tests/fixtures/*.csv
 
 # Reports & research state (grow over time; not source)

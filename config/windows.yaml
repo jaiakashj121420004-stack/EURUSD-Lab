@@ -1,0 +1,30 @@
+# All session windows (SESSIONS_AND_CONTEXT.md S1). h = NY hours relative to the trading day's
+# midnight. Most of these aren't consumed until Phase 5+ (all-sessions / cross-session analysis).
+pip: 0.0001
+
+sessions:
+  cbdr: [-3, 3]
+  asia: [-4, 0]
+  lon: [2, 5]
+  lon_sb: [3, 4]
+  lon_full: [2, 7]
+  nyam: [7, 12]
+  nyam_kz: [7, 10]
+  nyam_sb: [10, 11]
+  lunch: [12, 13.5]
+  nypm: [13.5, 16]
+  nypm_sb: [14, 15]
+  lon_close: [10, 12]
+  preny: [7, 9.5]
+  ny: [7, 16]
+
+# v0 (ny_session_lab.py) used these exact window names + ranges. nylab/days.py is a near-verbatim
+# port of v0's build_days(), so it still expects a dict shaped like v0's old CONFIG. This alias
+# table is how ROADMAP 1.2 ("YAML config replaces the CONFIG dict") is satisfied without renaming
+# columns or changing any numbers. legacy name -> session name above.
+legacy_aliases:
+  asia: asia
+  london_kz: lon
+  pre_ny: preny
+  ny: ny
+  ny_am_kz: nyam_kz

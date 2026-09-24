@@ -1,0 +1,87 @@
+# Maven Trading Capital account rules -- verified from maventrading.com (FAQ + drawdown blog
+# post) on 2026-09-24, NOT assumed. Akash confirmed (2026-09-24) to go with these verified
+# numbers over what CLAUDE.md originally guessed. Sizes are USD account size; prices are
+# approximate and change -- re-verify before relying on them for cost math.
+#
+# Used by: the Maven pass simulator (ROADMAP Phase 8.4). Akash can pick one explicitly, or the
+# simulator can recommend the best-EV program for a given model's actual OOS R distribution.
+verified_date: "2026-09-24"
+verified_from:
+  - https://maventrading.com/faqs
+  - https://maventrading.com/blog/daily-vs-max-drawdown-rules
+
+akash_account_size: 5000   # Akash's stated size; not yet confirmed which program below
+
+programs:
+  standard_1step:
+    label: "Standard 1-Step"
+    sizes: [2000, 5000, 10000, 20000, 50000, 100000]
+    profit_targets_pct: [8]
+    max_dd_pct: 5
+    max_dd_type: static_balance
+    daily_dd_pct: 3
+
+  standard_2step:
+    label: "Standard 2-Step"
+    sizes: [2000, 5000, 10000, 20000, 50000, 100000]
+    profit_targets_pct: [8, 5]
+    max_dd_pct: 8
+    max_dd_type: static_balance
+    daily_dd_pct: 4
+    daily_dd_reset: "00:00 UTC, based on the higher of equity or balance"
+    min_profitable_days_per_phase: 3
+    min_profit_per_profitable_day_pct: 0.5
+
+  standard_3step:
+    label: "Standard 3-Step"
+    sizes: [2000, 5000, 10000, 20000, 50000, 100000]
+    profit_targets_pct: [3, 3, 3]
+    max_dd_pct: 3
+    max_dd_type: static_balance
+    daily_dd_pct: 2
+
+  instant:
+    label: "Instant"
+    sizes: [2000, 5000, 10000, 20000, 50000, 100000]
+    profit_targets_pct: []
+    max_dd_pct: 3
+    max_dd_type: trailing
+    daily_dd_pct: 2
+    consistency_rule_pct: 20
+
+  mini:
+    label: "Mini"
+    sizes: [2000, 5000, 10000, 20000, 50000, 100000]
+    profit_targets_pct: []
+    max_dd_pct: 3
+    max_dd_type: trailing
+    daily_dd_pct: 2
+    profit_split_pct: 70
+    payout_window_hours: 24
+    payouts: "one payout only"
+
+  omo_2step:
+    label: "OMO 2-Step"
+    sizes: [2000, 5000, 10000, 20000, 50000, 100000]
+    profit_targets_pct: [6, 8]
+    max_dd_pct: 8
+    max_dd_type: static_balance
+    daily_dd_pct: 4
+    min_hold_seconds: 150
+
+  buy_now_pay_later:
+    label: "Buy Now, Pay Later"
+    sizes: [2000, 5000, 10000, 20000, 50000, 100000]
+    profit_targets_pct: [4]
+    max_dd_eval_pct: 10
+    max_dd_funded_pct: 8
+    daily_dd_funded_pct: 4
+    payment: "$5 upfront, remainder later"
+
+# Universal rule across every program above (verified from the FAQ):
+news_restriction: >
+  Cannot open or close a trade within 2 minutes either side of a red-folder ("high impact")
+  news release. Violation = challenge failure. Weekend position holding is permitted on all
+  account types.
+
+default_program: standard_2step

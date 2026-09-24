@@ -1,0 +1,14 @@
+# The v0 example model: London KZ sweep reversal in the NY AM window. Params identical to v0's
+# CONFIG dict. Phase 7 turns this into a proper Model plugin (ARCHITECTURE.md S4).
+name: london_sweep_reversal
+version: "1.0"
+description: >
+  Between 08:30 and 11:00 NY, if price trades beyond the London killzone high (low) and an M5
+  candle closes back inside within 6 bars, enter at that close in the opposite direction.
+  Stop 1 pip beyond the sweep extreme. Target 2R. Flat by 12:00 NY. One trade per day.
+params:
+  window: [8.5, 11.0]
+  max_bars_after_sweep: 6
+  stop_buffer_pips: 1.0
+  rr: 2.0
+  time_exit: 12.0

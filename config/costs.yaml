@@ -1,0 +1,3 @@
+# Cost model defaults (DATA_AND_TIME.md S4, RESEARCH_PROTOCOL rule "costs always on").
+default_cost_pips: 1.0     # round-trip spread + commission + slippage, used when the data has no spread column
+spread_col_divisor: 10     # MT5 "points" -> pips on a 5-digit broker (spread_pts / 10); use 1 on a 4-digit broker

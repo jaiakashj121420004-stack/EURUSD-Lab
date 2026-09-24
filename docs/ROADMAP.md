@@ -18,17 +18,17 @@ After each phase, show the user a short demo/result summary before continuing.
 ---
 
 ## Phase 0 — Reproduce v0 (½ day)
-- [ ] 0.1 venv + `requirements.txt` (pandas, numpy, matplotlib, pyyaml, pytest, pyarrow, mplfinance).
-- [ ] 0.2 `tests/fixtures/make_synth.py`: clean + planted variants, seeded, 2 and 5 years.
-- [ ] 0.3 Run v0 on the clean fixture; save `tests/golden/v0/` outputs. **Accept:** AT-01 true for v0.
+- [x] 0.1 venv + `requirements.txt` (pandas, numpy, matplotlib, pyyaml, pytest, pyarrow, mplfinance).
+- [x] 0.2 `tests/fixtures/make_synth.py`: clean + planted variants, seeded, 2 and 5 years.
+- [x] 0.3 Run v0 on the clean fixture; save `tests/golden/v0/` outputs. **Accept:** AT-01 true for v0.
 
 ## Phase 1 — Package refactor, same numbers (1–2 days)
-- [ ] 1.1 `nylab/` per ARCHITECTURE; CLI `python -m nylab run`.
-- [ ] 1.2 YAML config replaces CONFIG dict (`windows.yaml` already contains ALL sessions from SESSIONS_AND_CONTEXT §1).
-- [ ] 1.3 Loader: python-export CSV and MT5 "Export Bars" (tab-separated, `<DATE>` headers).
-- [ ] 1.4 Timezones: `auto, ny+7, ny, utc, utc±N, eu`; sanity check with red warning.
-- [ ] 1.5 Data quality + thin/gappy flags. 1.6 `available_at_h` docs for every column. 1.7 `summary.json`.
-- [ ] 1.8 Parquet cache `data/cache/` (bars, days) reused by `run` and `replay`.
+- [x] 1.1 `nylab/` per ARCHITECTURE; CLI `python -m nylab run`.
+- [x] 1.2 YAML config replaces CONFIG dict (`windows.yaml` already contains ALL sessions from SESSIONS_AND_CONTEXT §1).
+- [x] 1.3 Loader: python-export CSV and MT5 "Export Bars" (tab-separated, `<DATE>` headers).
+- [x] 1.4 Timezones: `auto, ny+7, ny, utc, utc±N, eu`; sanity check with red warning.
+- [x] 1.5 Data quality + thin/gappy flags. 1.6 `available_at_h` docs for every column. 1.7 `summary.json`.
+- [x] 1.8 Parquet cache `data/cache/` (bars, days) reused by `run` and `replay`.
 **Accept:** NY numbers equal v0 golden (tolerance 1e-9) except documented bug fixes. AT-01, AT-03.
 
 ## Phase 2 — Replay trainer MVP (2–4 days)  ← user's first practical tool
