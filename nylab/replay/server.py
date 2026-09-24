@@ -108,6 +108,11 @@ def make_handler(store: api.Store, thin_flags):
             try:
                 if u.path == "/api/sim/fill_check":
                     self._json(sim.check_bar(payload["position"], payload["bar"]))
+                elif u.path == "/api/sim/pending_fill_check":
+                    self._json(sim.check_pending_fill(payload["order"], payload["bar"]))
+                elif u.path == "/api/sim/compute_r":
+                    self._json(sim.compute_r(payload["side"], payload["entry"], payload["exit_price"],
+                                              payload["sl"], payload.get("cost_pips", 1.0), payload.get("pip", 0.0001)))
                 elif u.path == "/api/sim/lots":
                     lots = sim.lots_from_risk(payload["balance"], payload["risk_pct"],
                                                payload["sl_distance_pips"], payload.get("pip_value_per_lot", 10.0))

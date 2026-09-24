@@ -3,17 +3,24 @@
 // revealed timestamp. Stepping forward means "reveal one more 5-minute bar" -- the next
 // bar's TIME is known (fixed grid), its PRICE is not, until the server sends it.
 
-const SESSION_WINDOWS = [ // h-relative to td midnight -- for on-chart labels only (times aren't secret)
-  ["CBDR", -3, 3], ["Asia", -4, 0], ["London KZ", 2, 5], ["London SB", 3, 4],
-  ["NY AM", 7, 12], ["NY AM KZ", 7, 10], ["NY AM SB", 10, 11], ["Lunch", 12, 13.5],
-  ["NY PM", 13.5, 16], ["NY PM SB", 14, 15],
+// Non-overlapping top-level session windows -- shaded boxes on the chart (Phase 2 gap-close).
+const SESSION_BOXES = [
+  ["Asia", -4, 0, "rgba(154,127,209,.10)"], ["London KZ", 2, 5, "rgba(79,140,255,.10)"],
+  ["NY AM", 7, 12, "rgba(34,176,125,.08)"], ["Lunch", 12, 13.5, "rgba(127,139,171,.10)"],
+  ["NY PM", 13.5, 16, "rgba(224,82,106,.08)"],
+];
+// Narrower sub-windows (killzones / silver bullets) -- point markers only, would overlap if shaded.
+const SESSION_WINDOWS = [
+  ["CBDR", -3], ["London SB", 3], ["NY AM KZ", 7], ["NY AM SB", 10], ["NY PM SB", 14],
 ];
 
 const state = {
   allDays: [], filteredDays: [], currentIdx: -1, currentTd: null,
   tf: "M5", startAtH: 7, until: null, lastBarTime: null, dayEndH: 16,
   chart: null, series: null, markers: [],
-  levels: {}, position: null, // {side, entry, sl, tp, lots, riskDollars, openedAt}
+  levels: {},
+  pendingOrder: null, // {side, order_type: 'limit'|'stop', entry, sl, tp, riskPct}
+  position: null,     // {side, entry, sl, tp, lots, riskDollars, riskPct, openedAt}
   account: { starting: 5000, balance: 5000, dayStart: 5000, peak: 5000, program: null },
   playing: false, playTimer: null, lastClosedTrade: null, blind: false,
 };
@@ -30,6 +37,12 @@ async function api(path, opts) {
 const getJSON = (path) => api(path);
 const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+async function computeR(side, entry, exitPrice, sl) {
+  // Single implementation of the R-math, in nylab/replay/sim.py -- the client never
+  // reimplements it, so a mock trade's R can never drift from the backtest engine's formula.
+  return postJSON("/api/sim/compute_r", { side, entry, exit_price: exitPrice, sl, cost_pips: 1.0, pip: 0.0001 });
+}
+
 // ---------------------------------------------------------------- chart setup
 function initChart() {
   const el = $("#chart");
@@ -44,7 +57,9 @@ function initChart() {
     upColor: "#22b07d", downColor: "#e0526a", borderVisible: false,
     wickUpColor: "#22b07d", wickDownColor: "#e0526a",
   });
-  new ResizeObserver(() => state.chart.resize(el.clientWidth, el.clientHeight)).observe(el);
+  new ResizeObserver(() => { state.chart.resize(el.clientWidth, el.clientHeight); applySessionBoxes(); }).observe(el);
+  state.chart.timeScale().subscribeVisibleLogicalRangeChange(() => applySessionBoxes());
+  initDragHandlers();
 }
 
 function applyTheme(dark) {
@@ -109,6 +124,7 @@ async function loadDay(td) {
   state.tf = $("#tf").value;
   state.startAtH = parseFloat($("#startAt").value);
   state.position = null;
+  state.pendingOrder = null;
   updateTicketUI();
   $("#datePicker").value = td;
 
@@ -139,7 +155,9 @@ async function refreshBars() {
     state.chart.timeScale().scrollToPosition(2, false);
   }
   applySessionMarkers();
-  if (state.position) checkFillsAgainstNewBars(bars);
+  applySessionBoxes();
+  if (state.pendingOrder || state.position) await checkFillsAgainstNewBars(bars);
+  drawPositionLines();
 }
 
 async function refreshLevels() {
@@ -157,12 +175,47 @@ function drawLevelLines() {
     ["lon_high", "London high", "#4f8cff"], ["lon_low", "London low", "#4f8cff"],
     ["asia_high", "Asia high", "#9a7fd1"], ["asia_low", "Asia low", "#9a7fd1"],
     ["pdh", "PDH", "#d9a441"], ["pdl", "PDL", "#d9a441"],
-    ["mid_open", "Midnight open", "#7f8bab"], ["o0930", "09:30 open", "#7f8bab"],
+    ["pwh", "Prev week high", "#c9784f"], ["pwl", "Prev week low", "#c9784f"],
+    ["mid_open", "Midnight open", "#7f8bab"], ["o0830", "08:30 open", "#7f8bab"], ["o0930", "09:30 open", "#7f8bab"],
   ];
   show.forEach(([key, label, color]) => {
     const v = state.levels[key];
     if (v == null || state.blind) return;
     priceLines.push(state.series.createPriceLine({ price: v, color, lineWidth: 1, lineStyle: 2, title: label }));
+  });
+}
+
+// Shaded session boxes (Phase 2 gap-close: real translucent rectangles, not just markers).
+// Positioned with absolutely-placed <div>s over the chart, re-derived from the chart's own
+// timeScale on every redraw/pan/zoom -- purely a function of FIXED session-hour boundaries
+// (SESSIONS_AND_CONTEXT.md's session table), never of revealed price data, so there is nothing
+// to leak here: the boxes would be in the same place even on a day with zero bars revealed.
+let sessionBoxEls = [];
+function applySessionBoxes() {
+  const chartEl = $("#chart");
+  sessionBoxEls.forEach((el) => el.remove());
+  sessionBoxEls = [];
+  if (!state.currentTd || !state.chart) return;
+  const ts = state.chart.timeScale();
+  const untilEpoch = toEpoch(state.until);
+  SESSION_BOXES.forEach(([name, lo, hi, color]) => {
+    const t0 = toEpoch(tdPlusHours(state.currentTd, lo));
+    const t1 = Math.min(toEpoch(tdPlusHours(state.currentTd, hi)), untilEpoch);
+    if (t1 <= t0) return; // hasn't started yet at the current `until`
+    const x0 = ts.timeToCoordinate(t0);
+    const x1 = ts.timeToCoordinate(t1);
+    if (x0 == null && x1 == null) return;
+    const left = x0 == null ? 0 : x0;
+    const right = x1 == null ? chartEl.clientWidth : x1;
+    if (right <= left) return;
+    const div = document.createElement("div");
+    div.className = "sessionBox";
+    div.title = name;
+    div.style.left = `${left}px`;
+    div.style.width = `${right - left}px`;
+    div.style.background = color;
+    chartEl.appendChild(div);
+    sessionBoxEls.push(div);
   });
 }
 
@@ -238,66 +291,128 @@ $("#fFrom").onchange = loadDayList;
 $("#fTo").onchange = loadDayList;
 
 // ---------------------------------------------------------------- trading + account
+$("#orderType").onchange = () => {
+  $("#entryRow").style.display = $("#orderType").value === "market" ? "none" : "";
+};
+
 function updateTicketUI() {
-  $("#openTradeBtn").disabled = !!state.position;
-  $("#closeTradeBtn").disabled = !state.position;
+  const hasPending = !!state.pendingOrder, hasPosition = !!state.position;
+  $("#openTradeBtn").disabled = hasPending || hasPosition;
+  $("#cancelPendingBtn").disabled = !hasPending;
+  $("#closeTradeBtn").disabled = !hasPosition;
+  $("#partialCloseBtn").disabled = !hasPosition;
+  $("#moveBEBtn").disabled = !hasPosition || state.position.sl === state.position.entry;
   $("#saveJournalBtn").disabled = !state.lastClosedTrade;
-  $("#openTradeInfo").textContent = state.position
-    ? `Open: ${state.position.side.toUpperCase()} @ ${fmtPrice(state.position.entry)} SL ${fmtPrice(state.position.sl)} TP ${fmtPrice(state.position.tp)} lots ${state.position.lots}`
+  $("#pendingInfo").textContent = hasPending
+    ? `Pending: ${state.pendingOrder.side.toUpperCase()} ${state.pendingOrder.order_type.toUpperCase()} @ ${fmtPrice(state.pendingOrder.entry)} SL ${fmtPrice(state.pendingOrder.sl)} TP ${fmtPrice(state.pendingOrder.tp)}`
+    : "";
+  $("#openTradeInfo").textContent = hasPosition
+    ? `Open: ${state.position.side.toUpperCase()} @ ${fmtPrice(state.position.entry)} SL ${fmtPrice(state.position.sl)} TP ${fmtPrice(state.position.tp)} lots ${state.position.lots}` +
+      (state.position.partialClosedFrac ? ` (${Math.round(state.position.partialClosedFrac * 100)}% partially closed)` : "")
     : "";
 }
 
 async function refreshLotsPreview() {
   const sl = parseFloat($("#slInput").value), riskPct = parseFloat($("#riskPct").value);
-  const lastClose = state.series.data().slice(-1)[0]?.close;
-  if (!sl || !lastClose || !riskPct) { $("#lotsPreview").textContent = ""; return; }
-  const slPips = Math.abs(lastClose - sl) / 0.0001;
+  const refPrice = $("#orderType").value === "market"
+    ? state.series.data().slice(-1)[0]?.close
+    : parseFloat($("#entryInput").value);
+  if (!sl || !refPrice || !riskPct) { $("#lotsPreview").textContent = ""; return; }
+  const slPips = Math.abs(refPrice - sl) / 0.0001;
   const { lots } = await postJSON("/api/sim/lots", { balance: state.account.balance, risk_pct: riskPct, sl_distance_pips: slPips });
   $("#lotsPreview").textContent = `${lots} lots (SL ${slPips.toFixed(1)} pips)`;
 }
-["slInput", "riskPct"].forEach((id) => $(`#${id}`).addEventListener("input", refreshLotsPreview));
+["slInput", "riskPct", "entryInput"].forEach((id) => $(`#${id}`).addEventListener("input", refreshLotsPreview));
 
-$("#openTradeBtn").onclick = () => {
+async function openPosition(side, entry, sl, tp, riskPct) {
+  const { lots } = await postJSON("/api/sim/lots", {
+    balance: state.account.balance, risk_pct: riskPct, sl_distance_pips: Math.abs(entry - sl) / 0.0001,
+  });
+  state.position = {
+    side, entry, sl, tp, lots, originalLots: lots, riskPct,
+    riskDollars: state.account.balance * (riskPct / 100), // fixed at open so later partial closes are exact
+    partialClosedFrac: 0, openedAt: state.until,
+  };
+}
+
+$("#openTradeBtn").onclick = async () => {
   const lastBar = state.series.data().slice(-1)[0];
   if (!lastBar) return alert("No bar revealed yet.");
   const side = $("#side").value;
+  const orderType = $("#orderType").value;
   const sl = parseFloat($("#slInput").value), tp = parseFloat($("#tpInput").value) || null;
+  const riskPct = parseFloat($("#riskPct").value);
   if (!sl) return alert("Set a stop loss first.");
-  const entry = lastBar.close; // filled at the close of the last revealed bar (conservative, no peeking)
-  state.position = { side, entry, sl, tp, openedAt: state.until };
+
+  if (orderType === "market") {
+    const entry = lastBar.close; // filled at the close of the last revealed bar (conservative, no peeking)
+    await openPosition(side, entry, sl, tp, riskPct);
+  } else {
+    const entry = parseFloat($("#entryInput").value);
+    if (!entry) return alert("Set an entry price for a limit/stop order.");
+    state.pendingOrder = { side, order_type: orderType, entry, sl, tp, riskPct, placedAt: state.until };
+  }
   updateTicketUI();
+  drawPositionLines();
 };
+
+$("#cancelPendingBtn").onclick = () => { state.pendingOrder = null; updateTicketUI(); drawPositionLines(); };
 
 $("#closeTradeBtn").onclick = () => {
   const lastBar = state.series.data().slice(-1)[0];
   finishTrade(lastBar.close, "manual");
 };
 
-async function checkFillsAgainstNewBars(newBars) {
+$("#moveBEBtn").onclick = () => {
   if (!state.position) return;
+  state.position.sl = state.position.entry;
+  $("#slInput").value = state.position.entry.toFixed(5);
+  updateTicketUI();
+  drawPositionLines();
+};
+
+$("#partialCloseBtn").onclick = async () => {
+  if (!state.position) return;
+  const lastBar = state.series.data().slice(-1)[0];
+  const pos = state.position;
+  const closeFrac = 0.5 * (1 - pos.partialClosedFrac); // "50%" means half of what's still open
+  const r = await computeR(pos.side, pos.entry, lastBar.close, pos.sl);
+  state.account.balance += r.R_net * pos.riskDollars * closeFrac; // dollars at risk on the closed slice only
+  pos.partialClosedFrac += closeFrac;
+  pos.lots = Math.round(pos.originalLots * (1 - pos.partialClosedFrac) * 100) / 100;
+  updateTicketUI();
+  await refreshAccountPanel();
+};
+
+async function checkFillsAgainstNewBars(newBars) {
   for (const bar of newBars) {
-    if (bar.time <= toEpoch(state.position.openedAt)) continue;
-    const { filled, reason, exit } = await postJSON("/api/sim/fill_check", { position: state.position, bar });
-    if (filled) { await finishTrade(exit, reason); break; }
+    if (state.pendingOrder && bar.time > toEpoch(state.pendingOrder.placedAt)) {
+      const { filled, entry } = await postJSON("/api/sim/pending_fill_check", { order: state.pendingOrder, bar });
+      if (filled) {
+        const p = state.pendingOrder;
+        await openPosition(p.side, entry, p.sl, p.tp, p.riskPct);
+        state.pendingOrder = null;
+        updateTicketUI();
+      }
+    }
+    if (state.position && bar.time > toEpoch(state.position.openedAt)) {
+      const { filled, reason, exit } = await postJSON("/api/sim/fill_check", { position: state.position, bar });
+      if (filled) { await finishTrade(exit, reason); break; }
+    }
   }
 }
 
 async function finishTrade(exitPrice, reason) {
   if (!state.position) return;
   const pos = state.position;
-  const R = computeRLocal(pos, exitPrice);
-  state.account.balance += R.R_net * (state.account.balance * (parseFloat($("#riskPct").value) / 100));
-  state.lastClosedTrade = { ...pos, exit: exitPrice, reason, ...R, td: state.currentTd };
+  const r = await computeR(pos.side, pos.entry, exitPrice, pos.sl);
+  const remainingFrac = 1 - pos.partialClosedFrac;
+  state.account.balance += r.R_net * pos.riskDollars * remainingFrac;
+  state.lastClosedTrade = { ...pos, exit: exitPrice, reason, ...r, td: state.currentTd };
   state.position = null;
   updateTicketUI();
+  drawPositionLines();
   await refreshAccountPanel();
-}
-
-function computeRLocal(pos, exitPrice) {
-  const risk = Math.abs(pos.entry - pos.sl);
-  const pnl = pos.side === "long" ? exitPrice - pos.entry : pos.entry - exitPrice;
-  const costPips = 1.0, pip = 0.0001;
-  return { risk_pips: risk / pip, R_gross: pnl / risk, R_net: (pnl - costPips * pip) / risk };
 }
 
 async function refreshAccountPanel() {
@@ -318,6 +433,70 @@ async function refreshAccountPanel() {
     <div class="row"><span>Max DD used</span><span class="badge ${s.max_dd_status}">${s.max_dd_used_pct.toFixed(2)}% / ${s.max_dd_limit_pct}%</span></div>
     ${s.day_dd_breached || s.max_dd_breached ? '<div class="row" style="color:#e0526a">BREACHED</div>' : ""}
   `;
+}
+
+// ---------------------------------------------------------------- SL/TP chart lines + drag
+// (Phase 2 gap-close: "drag SL/TP" -- lightweight-charts v4 has no built-in draggable price
+// line, so this hit-tests the mouse against each line's own y-coordinate and repositions it
+// by hand. Bounded to the currently open position; dragging never touches historical bars.)
+let entryLine = null, slLine = null, tpLine = null, pendingLine = null;
+
+function drawPositionLines() {
+  [entryLine, slLine, tpLine, pendingLine].forEach((pl) => { if (pl) state.series.removePriceLine(pl); });
+  entryLine = slLine = tpLine = pendingLine = null;
+
+  if (state.pendingOrder) {
+    pendingLine = state.series.createPriceLine({
+      price: state.pendingOrder.entry, color: "#d9a441", lineWidth: 1, lineStyle: 3,
+      title: `PENDING ${state.pendingOrder.side.toUpperCase()}`, axisLabelVisible: true,
+    });
+  }
+  if (!state.position) return;
+  const pos = state.position;
+  entryLine = state.series.createPriceLine({ price: pos.entry, color: "#7f8bab", lineWidth: 1, lineStyle: 0, title: "Entry", axisLabelVisible: true });
+  slLine = state.series.createPriceLine({ price: pos.sl, color: "#e0526a", lineWidth: 2, lineStyle: 2, title: "SL (drag)", axisLabelVisible: true });
+  if (pos.tp != null) tpLine = state.series.createPriceLine({ price: pos.tp, color: "#22b07d", lineWidth: 2, lineStyle: 2, title: "TP (drag)", axisLabelVisible: true });
+}
+
+function initDragHandlers() {
+  const chartEl = $("#chart");
+  let dragTarget = null; // "sl" | "tp" | null
+
+  const hitTest = (y) => {
+    if (!state.position) return null;
+    const slY = state.series.priceToCoordinate(state.position.sl);
+    if (slY != null && Math.abs(y - slY) < 6) return "sl";
+    if (state.position.tp != null) {
+      const tpY = state.series.priceToCoordinate(state.position.tp);
+      if (tpY != null && Math.abs(y - tpY) < 6) return "tp";
+    }
+    return null;
+  };
+
+  chartEl.addEventListener("mousedown", (e) => {
+    const rect = chartEl.getBoundingClientRect();
+    dragTarget = hitTest(e.clientY - rect.top);
+    if (dragTarget) chartEl.classList.add("dragging-line");
+  });
+  window.addEventListener("mousemove", (e) => {
+    const rect = chartEl.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    if (!dragTarget) {
+      chartEl.style.cursor = hitTest(y) ? "ns-resize" : "";
+      return;
+    }
+    const price = state.series.coordinateToPrice(y);
+    if (price == null || !state.position) return;
+    state.position[dragTarget] = Math.round(price * 100000) / 100000;
+    if (dragTarget === "sl") $("#slInput").value = state.position.sl.toFixed(5);
+    else $("#tpInput").value = state.position.tp.toFixed(5);
+    drawPositionLines();
+    updateTicketUI();
+  });
+  window.addEventListener("mouseup", () => {
+    dragTarget = null;
+    chartEl.classList.remove("dragging-line");
+  });
 }
 
 // ---------------------------------------------------------------- journal + screenshot

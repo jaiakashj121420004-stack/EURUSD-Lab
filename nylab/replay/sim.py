@@ -19,6 +19,24 @@ def market_fill_price(next_bar: dict) -> float:
     return float(next_bar["open"])
 
 
+def check_pending_fill(order: dict, bar: dict) -> dict:
+    """A resting LIMIT or STOP entry order (Phase 2 gap-close: REPLAY_TRAINER.md S8 originally
+    only specified a market-style fill). order: {side: 'long'|'short', entry: float,
+    order_type: 'limit'|'stop'}. Same same-bar rule as check_bar: the order fills the instant
+    price trades through its entry level within the bar, no fill *inside* the bar before that
+    (conservative -- it can only fill AT its stated price, never better).
+
+    A long limit / short stop rests BELOW the market and triggers when price dips down to it
+    (bar low <= entry). A long stop / short limit rests ABOVE the market and triggers when price
+    rises up to it (bar high >= entry). Returns {filled: bool, entry: float|None}."""
+    side, entry, otype = order["side"], float(order["entry"]), order["order_type"]
+    hi, lo = float(bar["high"]), float(bar["low"])
+
+    triggers_on_dip = (side == "long" and otype == "limit") or (side == "short" and otype == "stop")
+    hit = (lo <= entry) if triggers_on_dip else (hi >= entry)
+    return {"filled": bool(hit), "entry": entry if hit else None}
+
+
 def check_bar(position: dict, bar: dict) -> dict:
     """position: {side: 'long'|'short', sl: float, tp: float|None}. bar: {high, low, close}.
     Same conservative rule as nylab.models.london_sweep_reversal.backtest(): if both the stop

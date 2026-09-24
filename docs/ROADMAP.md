@@ -38,23 +38,38 @@ Spec: REPLAY_TRAINER.md.
 - [x] 2.3 Day table with **basic filters**: date range, weekday, thin-day exclusion. (No dedicated
       month/year quick-picker -- the date-range filter covers the same need; can add if Akash wants it.)
 - [x] 2.4 Playback: +1 bar, +1 hour, play/speeds, jump-to-time. TFs M5/M15/H1/H4/D1 from revealed bars.
-- [~] 2.5 Overlays: **done** -- London/Asia H/L, PDH/PDL, midnight & 09:30 opens, session-start markers
-      (label + time, not shaded boxes). **Not done** -- PWH/PWL (nylab doesn't compute a weekly
-      high/low column yet at all, session-level or day-level), 08:30 open line, true shaded session
-      boxes (markers used instead).
-- [~] 2.6 Mock trading: **done** -- market-style entry, SL/TP, conservative same-bar fill, R math
-      (verified against the backtest engine's formula), Maven account panel (daily/max DD, breach
-      colour states), trade journal appended to `research/replay/trades.csv`, best-effort chart
-      screenshot on journal save. **Not done** -- limit/stop entry types (only market-style "fill at
-      last revealed close"), drag SL/TP, move-to-breakeven, partial close, challenge mode (Phase 6.6).
+- [x] 2.5 Overlays: London/Asia H/L, PDH/PDL, **PWH/PWL** (new `pwh`/`pwl` day-table columns --
+      previous *completed* calendar week's high/low, available_at_h -7, same status as PDH/PDL),
+      midnight, **08:30** and 09:30 opens, **true shaded session boxes** for the 5 non-overlapping
+      top-level sessions (Asia/London KZ/NY AM/Lunch/NY PM -- drawn as translucent divs positioned
+      from the chart's own timeScale, re-derived on every pan/zoom, never from revealed price data),
+      plus point markers for the narrower killzone/silver-bullet sub-windows (unchanged from before,
+      kept separate so the shaded boxes don't nest/overlap them).
+- [x] 2.6 Mock trading: market-style entry, **limit and stop pending entry orders** (new
+      `sim.check_pending_fill()` -- same conservative same-bar trigger rule as the fill engine,
+      shown on-chart as a dashed "PENDING" price line, cancellable before it fills), SL/TP,
+      conservative same-bar fill, R math (single implementation: `sim.compute_r()`, now called by
+      the frontend over `/api/sim/compute_r` instead of a second, separately-maintained JS copy),
+      **draggable SL/TP price lines** on the chart (hand-rolled hit-test + reposition, since
+      lightweight-charts v4 has no built-in draggable price line), **move-to-breakeven** button,
+      **partial close (50% of what's still open)** button (risk-dollars fixed at trade-open time,
+      so repeated partial closes stay exact), Maven account panel (daily/max DD, breach colour
+      states), trade journal appended to `research/replay/trades.csv`, best-effort chart screenshot
+      on journal save. **Still not done, on purpose:** challenge mode -- the roadmap always slotted
+      this under 6.6, not 2.6, and it depends on nothing built yet in Phase 2, so it stays deferred
+      to Phase 6 rather than being bolted on early.
 - [x] 2.7 No-leak API test -- bars, levels (available_at_h), day filters, HTF-resample-equals-revealed-
-      bars, plus a full subprocess integration test hitting the real HTTP server.
+      bars, plus a full subprocess integration test hitting the real HTTP server (now also covering
+      the new `/api/sim/pending_fill_check` and `/api/sim/compute_r` routes).
 **Accept:** REPLAY_TRAINER §9 -- item 1 (date jump, tested < 1s avg), item 3 (no-leak + resample,
 tested), item 5 (Maven daily breach, tested), item 6 (offline by construction: stdlib http.server +
-locally vendored JS, zero external requests in index.html) all hold. Item 4 partially holds: the
-R-math for a market-style trade with SL/TP is proven identical to the backtest engine's formula
-(tested), but "limit entry ... BE move, partial" isn't built yet (see 2.6) -- flagged for Akash,
-not silently declared done.
+locally vendored JS, zero external requests in index.html) all hold. Item 4 now fully holds for
+everything REPLAY_TRAINER §8 actually asks for (market/limit/stop entry, SL/TP, BE move, partial
+close, R-math identical to the backtest engine, tested); challenge mode remains out of scope for
+Phase 2 by the roadmap's own original split and is still tracked under 6.6.
+Note: closing these gaps added two genuinely new day-table columns (`pwh`/`pwl`) that v0 never had,
+so `tests/test_nylab_phase1.py::test_days_csv_matches_golden` was loosened from "exact column set"
+to "every v0 column still present and unchanged" -- it still fails if any v0-era number drifts.
 
 ## Phase 3 — Ledger, hypothesis YAML, honest stats (1–2 days)
 - [ ] 3.1 Hypothesis YAML + safe DSL (supports `day.x` and `<session>.x` dotted access).

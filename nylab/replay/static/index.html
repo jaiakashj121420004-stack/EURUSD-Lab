@@ -87,13 +87,26 @@
       <label>Side
         <select id="side"><option value="long">BUY</option><option value="short">SELL</option></select>
       </label>
+      <label>Order type
+        <select id="orderType">
+          <option value="market">Market (fill now)</option>
+          <option value="limit">Limit (rests below/above)</option>
+          <option value="stop">Stop (rests below/above)</option>
+        </select>
+      </label>
+      <label id="entryRow" style="display:none">Entry price <input type="number" id="entryInput" step="0.00001"></label>
       <label>Risk % <input type="number" id="riskPct" value="0.5" step="0.1" min="0.1"></label>
       <label>SL <input type="number" id="slInput" step="0.00001"></label>
       <label>TP <input type="number" id="tpInput" step="0.00001"></label>
       <div id="lotsPreview" class="muted"></div>
-      <button id="openTradeBtn">Open trade</button>
+      <button id="openTradeBtn">Place order</button>
+      <button id="cancelPendingBtn" disabled>Cancel pending order</button>
       <button id="closeTradeBtn" disabled>Close trade</button>
+      <button id="partialCloseBtn" disabled title="Close half the position at market, keep the rest running">Partial close 50%</button>
+      <button id="moveBEBtn" disabled title="Move stop loss to entry price">Move SL to breakeven</button>
+      <p class="muted" style="margin:4px 0 0">Drag the SL/TP lines on the chart to adjust them.</p>
     </div>
+    <div id="pendingInfo" class="muted"></div>
     <div id="openTradeInfo"></div>
     <hr>
     <h3>Journal (last trade)</h3>

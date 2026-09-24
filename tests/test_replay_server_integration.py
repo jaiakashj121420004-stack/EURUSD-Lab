@@ -9,6 +9,7 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 
@@ -82,3 +83,29 @@ def test_prop_endpoint_has_maven_programs(running_server):
     prop = json.loads(body)
     assert "standard_2step" in prop["programs"]
     assert prop["programs"]["standard_2step"]["daily_dd_pct"] == 4
+
+
+def _post(base, path, payload):
+    req = urllib.request.Request(
+        f"{base}{path}", data=json.dumps(payload).encode(), method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=3) as r:
+        return r.status, json.loads(r.read())
+
+
+def test_sim_pending_fill_and_compute_r_endpoints(running_server):
+    """Phase 2 gap-close: the limit/stop pending-order check and the shared compute_r helper
+    are reachable over HTTP, not just as direct Python calls (test_replay_api.py covers the
+    logic itself)."""
+    status, result = _post(running_server, "/api/sim/pending_fill_check", {
+        "order": {"side": "long", "entry": 1.10000, "order_type": "limit"},
+        "bar": {"high": 1.10100, "low": 1.09950},
+    })
+    assert status == 200 and result == {"filled": True, "entry": 1.10000}
+
+    status, result = _post(running_server, "/api/sim/compute_r", {
+        "side": "long", "entry": 1.10500, "exit_price": 1.10700, "sl": 1.10400,
+    })
+    assert status == 200
+    assert abs(result["R_gross"] - 2.0) < 1e-6

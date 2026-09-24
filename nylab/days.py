@@ -25,6 +25,7 @@ COLUMN_DOCS = {
     "cbdr_high": -4, "cbdr_low": -4,
     "pdh": -7, "pdl": -7,
     "day_range": 17, "adr5": -7, "adr20": -7,
+    "pwh": -7, "pwl": -7,
     "asia_range": 0, "lon_range": 5, "ny_range": 16, "cbdr_range": -4,
     "tilopen_high": 9.5, "tilopen_low": 9.5, "adr_used_0930": 9.5,
     "ny_takes_lon_high": 16, "ny_takes_lon_high_t": 16, "ny_takes_lon_low": 16, "ny_takes_lon_low_t": 16,
@@ -131,5 +132,18 @@ def build_days(df: pd.DataFrame, C: dict) -> pd.DataFrame:
     d["dow"] = d.index.dayofweek
     d["ny_forms_day_high"] = d.ny_high >= d.day_high
     d["ny_forms_day_low"] = d.ny_low <= d.day_low
+
+    # PWH/PWL (Phase 2 gap-close): previous COMPLETED calendar week's high/low, mapped onto
+    # every day of the following week. Known the instant that week starts trading (same
+    # available_at_h as PDH/PDL, -7) since it is entirely historical by then. Trading weeks
+    # never contain a Sat/Sun td (already filtered upstream), so grouping by ISO (year, week)
+    # cleanly buckets Mon-Fri without a manual Sun-Fri boundary.
+    iso = d.index.isocalendar()
+    week_key = iso["year"].astype(int) * 100 + iso["week"].astype(int)
+    wk = pd.DataFrame({"h": d["day_high"], "l": d["day_low"], "wk": week_key}).groupby("wk").agg(
+        wk_high=("h", "max"), wk_low=("l", "min")
+    ).shift(1)
+    d["pwh"] = week_key.map(wk["wk_high"])
+    d["pwl"] = week_key.map(wk["wk_low"])
 
     return d.dropna(subset=["ny_open", "lon_open", "o0930", "ny_close"])

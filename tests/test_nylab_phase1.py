@@ -44,11 +44,15 @@ def _numeric_cols_match(gold: pd.DataFrame, new: pd.DataFrame, tol=1e-9):
 
 
 def test_days_csv_matches_golden(nylab_run):
+    """v0 parity: every column v0 golden had must still exist with the same numbers. Phase 2
+    added pwh/pwl (weekly high/low) -- a genuinely new column v0 never computed -- so this no
+    longer requires an exact column-set match, only that nothing v0 had was dropped or changed."""
     gold = pd.read_csv(GOLDEN / "days.csv", index_col=0, parse_dates=True)
     new = pd.read_csv(nylab_run / "days.csv", index_col=0, parse_dates=True)
-    assert gold.shape == new.shape
-    assert list(gold.columns) == list(new.columns)
-    mismatches = _numeric_cols_match(gold, new)
+    assert len(gold) == len(new)
+    missing = set(gold.columns) - set(new.columns)
+    assert not missing, f"columns present in v0 golden but dropped: {missing}"
+    mismatches = _numeric_cols_match(gold, new[list(gold.columns)])
     assert mismatches == [], f"columns diverged from v0 golden: {mismatches}"
 
 

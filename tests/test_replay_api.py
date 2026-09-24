@@ -164,3 +164,46 @@ def test_maven_not_breached_when_within_limits():
                          peak_balance=5000, program=program)
     assert s["day_dd_breached"] is False
     assert s["day_dd_status"] == "green"
+
+
+def test_pending_limit_order_fills_on_dip():
+    """A long LIMIT rests below market and fills when price dips down to it."""
+    order = {"side": "long", "entry": 1.10000, "order_type": "limit"}
+    bar = {"high": 1.10100, "low": 1.09950}
+    result = sim.check_pending_fill(order, bar)
+    assert result == {"filled": True, "entry": 1.10000}
+
+
+def test_pending_limit_order_does_not_fill_if_untouched():
+    order = {"side": "long", "entry": 1.09000, "order_type": "limit"}
+    bar = {"high": 1.10100, "low": 1.09950}
+    result = sim.check_pending_fill(order, bar)
+    assert result == {"filled": False, "entry": None}
+
+
+def test_pending_stop_order_fills_on_breakout():
+    """A long STOP rests above market and fills when price rises up to it."""
+    order = {"side": "long", "entry": 1.10200, "order_type": "stop"}
+    bar = {"high": 1.10250, "low": 1.09980}
+    result = sim.check_pending_fill(order, bar)
+    assert result == {"filled": True, "entry": 1.10200}
+
+
+def test_pending_short_limit_fills_on_rally():
+    """A short LIMIT rests above market and fills when price rallies up to it."""
+    order = {"side": "short", "entry": 1.10300, "order_type": "limit"}
+    bar = {"high": 1.10310, "low": 1.10100}
+    result = sim.check_pending_fill(order, bar)
+    assert result == {"filled": True, "entry": 1.10300}
+
+
+def test_pwh_pwl_available_from_day_open(store):
+    """Phase 2 gap-close: PWH/PWL exist in the day table and, like PDH/PDL, are already fully
+    known at the start of the trading day (available_at_h -7) since they only summarize the
+    prior, fully-completed calendar week."""
+    from nylab.days import COLUMN_DOCS
+    assert COLUMN_DOCS["pwh"] == -7 and COLUMN_DOCS["pwl"] == -7
+    assert "pwh" in store.days.columns and "pwl" in store.days.columns
+    have_both = store.days.dropna(subset=["pwh", "pwl"])
+    assert len(have_both) > 0, "pwh/pwl never populated on this fixture -- check the week-grouping logic"
+    assert (have_both["pwh"] >= have_both["pwl"]).all()

@@ -45,3 +45,8 @@ tr.dayRow.spoiler td { opacity: .5; }
 #lotsPreview { margin: 4px 0 8px; }
 #openTradeInfo { margin-top: 8px; font-size: 12px; }
 .footnote { margin-top: 16px; line-height: 1.4; }
+
+/* Phase 2 gap-close: shaded session boxes + draggable SL/TP overlay */
+#chart { position: relative; }
+.sessionBox { position: absolute; top: 0; bottom: 0; pointer-events: none; z-index: 1; }
+#chart.dragging-line { cursor: ns-resize; }
