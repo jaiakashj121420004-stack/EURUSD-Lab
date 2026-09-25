@@ -10,6 +10,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from nylab import calendar_features
+
 # ROADMAP 1.6: the latest NY hour (relative to td midnight) at which each DAY column's value is
 # known. Starting Phase 3, a hypothesis/model may only condition on a column whose
 # available_at_h <= its own decision_time_h (RESEARCH_PROTOCOL.md S3) -- this is how look-ahead
@@ -38,6 +40,8 @@ COLUMN_DOCS = {
     "ny_hits_asia_+2.5sd": 16, "ny_hits_asia_-2.5sd": 16,
     "dow": -7, "ny_forms_day_high": 17, "ny_forms_day_low": 17,
 }
+COLUMN_DOCS.update(calendar_features.column_docs())  # ROADMAP 4.3: news columns join the
+# same look-ahead registry as everything else -- nylab.hyp_loader checks this dict, not two.
 
 
 def window(df: pd.DataFrame, lo: float, hi: float, name: str) -> pd.DataFrame:
@@ -147,3 +151,14 @@ def build_days(df: pd.DataFrame, C: dict) -> pd.DataFrame:
     d["pwl"] = week_key.map(wk["wk_low"])
 
     return d.dropna(subset=["ny_open", "lon_open", "o0930", "ny_close"])
+
+
+def attach_calendar_features(d: pd.DataFrame, calendar: pd.DataFrame, sessions_cfg: dict) -> pd.DataFrame:
+    """ROADMAP 4.3: join the news day-flags (has_nfp/has_cpi/has_fomc/has_ecb, red_usd_0830,
+    red_eur_london) and per-session high-importance USD/EUR event counts + max|surprise_z| onto
+    the DAY table `d`. `calendar` is nylab.calendar_io's canonical schema (time_ny/currency/
+    event_name/importance/actual/forecast/previous); `sessions_cfg` is nylab.config.sessions().
+    Purely additive -- every column it adds is already registered in COLUMN_DOCS above, so a
+    hypothesis referencing one is look-ahead-checked exactly like any other DAY column."""
+    flags = calendar_features.build_day_flags(calendar, d.index, sessions_cfg)
+    return d.join(flags)

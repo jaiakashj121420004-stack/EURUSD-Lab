@@ -3,7 +3,7 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 3 (ledger + honest stats) done. Ready for Phase 4.
+## Status: Phase 3 (ledger + honest stats) done, confirmed on Akash's real 5-year EURUSD data. Phase 4 (economic calendar) code done and unit-tested; waiting on Akash to run mql5/ExportCalendar.mq5 in MetaEditor to confirm it against his real broker calendar.
 
 Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
 call: keep building through the phases on the automated tests alone, and he'll sit down and look
@@ -171,15 +171,87 @@ model survives-oos to subject them to.
 Same three as after Phase 1 (Maven program confirmation, broker tz convention, CLAUDE.md's stale
 +10%/+8% text) — nothing new this phase.
 
+### Phase 4 — Economic calendar: code done, tests pass, real-broker confirmation pending
+
+**What was built:**
+- `mql5/ExportCalendar.mq5` — read-only MQL5 script (Print()s progress + earliest-event-found;
+  never touches trades). Chunks `CalendarValueHistory()` by year, writes `calendar_export.csv` with
+  `time_server,currency,event_id,event_name,importance,actual,forecast,previous,revised_previous,
+  unit,multiplier` (MetaQuotes' `LONG_MIN`-as-"not set" and the ×1e6 fixed-point encoding both
+  handled). README.md's new "Phase 4" section is the exact compile-and-run walkthrough (MetaEditor
+  F7, drag onto a live chart — calendar functions don't work in the Strategy Tester).
+- `nylab/calendar_io.py` — `load()` auto-detects the MQL5-export schema vs. the 4.4 fallback schema
+  (`datetime_ny,currency,event,impact,actual,forecast,previous`) by column names and dispatches.
+  Server→NY conversion reuses `nylab.data.timezones.to_new_york()` with the SAME `--tz` mode
+  `nylab run` used for the price bars — the whole point of SESSIONS_AND_CONTEXT §4 is that the
+  calendar and the bars must agree on what "NY time" means. `save()`/`load_cache()` — parquet, same
+  pattern as `nylab.cache`.
+- `nylab/calendar_features.py` — `classify_family()` (regex families: NFP/CPI/FOMC/ECB/PMI/GDP/
+  retail_sales/claims/speech, ordered so FOMC beats the generic "speech" catch-all).
+  `compute_surprise()` adds `surprise` (actual-forecast) and `surprise_z` (surprise / stdev of that
+  SAME event's PRIOR releases only, via `.shift(1).expanding()` — never sees its own or a future
+  release; NaN until ≥8 prior releases exist, matching SESSIONS_AND_CONTEXT §4's rule literally).
+  `build_day_flags()` produces, per trading day: `has_nfp/has_cpi/has_fomc/has_ecb` (any currency,
+  scheduled that day), `red_usd_0830`/`red_eur_london` (high-importance USD at 08:00–09:00 NY / EUR
+  inside the London KZ window), and per-session (asia/lon/preny/nyam/ny) `_usd_cnt`/`_usd_maxz`/
+  `_eur_cnt`/`_eur_maxz` for high-importance events actually inside that window.
+- **Look-ahead, wired the same way as every other DAY column:** `calendar_features.column_docs()`
+  returns `available_at_h` for every column it can produce — the "is X scheduled today" flags get
+  -7 (known at the trading day's open, same status as PDH/PDL, since MT5's calendar knows the
+  schedule days ahead), the per-session count/max|z| columns get that session's own `_high` column's
+  `available_at_h` (0/5/9.5/10/16) since they depend on that window's actual releases. This dict is
+  `.update()`-ed into `nylab.days.COLUMN_DOCS` at import time, so `nylab.hyp_loader`'s Phase 3
+  look-ahead check (the one that already rejects a hypothesis condition using a too-late column)
+  covers calendar columns automatically — nothing new to maintain in two places.
+- `nylab.days.attach_calendar_features(d, calendar, sessions_cfg)` — one call that joins all of the
+  above onto the DAY table. Wired into `nylab run` as an **additive, optional** step: if
+  `data/calendar.parquet` exists (default path, override with `--calendar`), it's attached and the
+  run prints the USD/EUR row counts; if not, `nylab run` prints a one-line notice and continues
+  exactly as before — Phase 3's hypotheses/report/tests are unaffected either way.
+- `python -m nylab calendar-import <csv> [--tz ny+7] [--out data/calendar.parquet]` — new CLI
+  subcommand (was a "not built yet" stub), prints the imported date range and per-currency counts.
+
+**Accept, split into what's provable now vs. what needs Akash's own data:**
+- **AT-04 (code-provable now):** `test_at04_nfp_and_fomc_land_at_expected_ny_hour` builds a
+  synthetic export the same way `ExportCalendar.mq5` writes a real one (server-time strings, the
+  same CSV columns) with an NFP release in January and one in July, and a FOMC release in each —
+  asserts both NFP rows land at 08:30 NY and both FOMC rows at 14:00 NY, i.e. exactly the Roadmap's
+  Accept line, under the "ny+7" broker-clock convention (a CONSTANT offset, since a "NY close"
+  broker's clock tracks US DST right along with New York — that constancy is the thing being
+  tested, not a loophole around it; `nylab.data.timezones.sanity_check`, already proven in Phase 0/1
+  against the real price bars, is the independent check that "ny+7" is the RIGHT mode for Akash's
+  broker in the first place).
+- **21 tests in `tests/test_calendar.py`** (schema auto-detection both ways, rejection of an
+  unrecognized schema, all 9 event-family regexes incl. the ECB-before-"speech" ordering, the
+  surprise-z min-prior-count and no-future-leak guarantee, day-flag scheduling + per-session window
+  boundaries including the exclusive-upper-bound edge case, and the COLUMN_DOCS registration).
+  `pytest -q`: **87 passed** (66 Phase 0–3 + 21 new).
+- **Still needs Akash:** running the actual `.mq5` script in MetaEditor against his real MT5
+  calendar and re-running `nylab run` on his real export — that's the literal "on the user's real
+  data" half of the Accept line, and it's the next one-step-at-a-time task below.
+
+**Design choices worth flagging:**
+- `surprise_z = surprise / stdev(prior surprises)` is NOT demeaned (no `- mean` term) — that's
+  SESSIONS_AND_CONTEXT §4's formula exactly as written, not an oversight. It means a currency/event
+  whose surprises are typically small-but-nonzero can still show a "large" z on an unremarkable
+  release; that's a property of the spec's chosen formula, not a bug, and it's called out here in
+  case Akash wants demeaning added later (a 1-line change: `(surprise - prior_mean) / prior_std`).
+- High-importance is `importance >= 3` (MQL5's own 0–3 scale, 3=high) for every "red"/session-count
+  column. The day-level `has_nfp`/`has_cpi`/`has_fomc`/`has_ecb` flags do NOT filter by importance —
+  they fire on ANY release matching that family's name regex, on the theory that "is a rate decision
+  happening today" is binary regardless of how MetaQuotes ranked its importance that particular time.
+
 ## Next up
 
-Moving to **Phase 4 — Economic calendar** (SESSIONS_AND_CONTEXT.md §4): an MQL5 read-only export
-script (with step-by-step MetaEditor instructions, given one at a time, when Akash actually needs
-to run something -- his standing request), `nylab calendar-import`, surprise z-scores, event
-families, and per-session/per-day news availability rules. Acceptance target: on Akash's real
-data, NFP lands at 08:30 NY in both summer and winter, FOMC at 14:00.
+**Phase 4 confirmation (one step at a time, needs Akash's MT5/MetaEditor):** compile and run
+`mql5/ExportCalendar.mq5` (README.md's "Phase 4" section has the exact steps), then
+`python -m nylab calendar-import calendar_export.csv`, then re-run `python -m nylab run` and check
+it prints "attached news features from data/calendar.parquet" with a plausible USD/EUR row count.
+Once that's confirmed, Phase 4 is fully accepted and we move to **Phase 5 — all sessions, session
+character, cross-session analysis**.
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
-2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (next), 5 All
-sessions + session character, 6 Replay trainer v2, 7 ICT features & models, 8 Verification/
-robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).
+2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (code done,
+confirmation pending), 5 All sessions + session character (next), 6 Replay trainer v2, 7 ICT
+features & models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop
+(ongoing).

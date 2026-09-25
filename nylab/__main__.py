@@ -13,6 +13,7 @@ from datetime import datetime
 import pandas as pd
 
 from nylab import cache as cache_mod
+from nylab import calendar_io
 from nylab import config as cfg
 from nylab import days as days_mod
 from nylab import hyp_engine, hyp_loader
@@ -58,6 +59,15 @@ def cmd_run(args):
     d = days_mod.build_days(df, windows)
     if len(d) < 60:
         sys.exit(f"Only {len(d)} complete trading days -- need at least ~60 (ideally 250+).")
+
+    if os.path.exists(args.calendar):
+        cal = calendar_io.load_cache(args.calendar)
+        d = days_mod.attach_calendar_features(d, cal, cfg.sessions())
+        print(f"  attached news features from {args.calendar} "
+              f"({cal['currency'].eq('USD').sum()} USD / {cal['currency'].eq('EUR').sum()} EUR rows)")
+    else:
+        print(f"  no calendar cache at {args.calendar} -- skipping news features "
+              f"(run `nylab calendar-import` first if you want them; see ROADMAP Phase 4).")
     split_date = d.index[int(len(d) * (1 - args.oos))]
     print(f"  {len(d)} trading days  |  out-of-sample from {split_date:%Y-%m-%d}")
 
@@ -118,6 +128,23 @@ def cmd_run(args):
     print(f"Summary: {os.path.abspath(os.path.join(out_dir, 'summary.json'))}")
 
 
+def cmd_calendar_import(args):
+    """ROADMAP 4.2/4.4: convert mql5/ExportCalendar.mq5's calendar_export.csv (or a 4.4 fallback
+    CSV) into data/calendar.parquet. tz_mode MUST be the same mode `nylab run` used for the price
+    bars (SESSIONS_AND_CONTEXT.md S4) -- pass the exact same --tz value, or leave both on auto's
+    default "ny+7" if that's what your `nylab run` printed as "server-time mode"."""
+    df = calendar_io.load(args.csv, tz_mode=args.tz)
+    if len(df) == 0:
+        sys.exit(f"{args.csv}: parsed 0 rows -- check the file isn't empty and matches one of the "
+                  f"two expected schemas (see docs/SESSIONS_AND_CONTEXT.md S4).")
+    calendar_io.save(df, args.out)
+    by_ccy = df["currency"].value_counts()
+    print(f"Imported {len(df)} events ({df['time_ny'].min():%Y-%m-%d} -> {df['time_ny'].max():%Y-%m-%d}), "
+          f"by currency: {dict(by_ccy)}")
+    print(f"Saved {os.path.abspath(args.out)} -- `nylab run` will pick it up automatically next time "
+          f"(via --calendar, default data/calendar.parquet).")
+
+
 def cmd_hypothesis_add(args):
     """ROADMAP 3.6: scaffold a new hypothesis YAML from a template, so adding an idea is
     'fill in a form', not 'write Python and risk a look-ahead bug'. Deliberately writes
@@ -169,6 +196,9 @@ def main():
     p_run.add_argument("--no-cache", dest="no_cache", action="store_true")
     p_run.add_argument("--ledger-path", dest="ledger_path", default="research/ledger.csv",
                         help="append-only multiple-testing ledger (RESEARCH_PROTOCOL.md S4)")
+    p_run.add_argument("--calendar", default="data/calendar.parquet",
+                        help="calendar cache from `nylab calendar-import` (ROADMAP Phase 4); "
+                             "silently skipped if the file doesn't exist")
     p_run.set_defaults(func=cmd_run)
 
     p_replay = sub.add_parser("replay", help="launch the offline replay trainer (opens your browser)")
@@ -188,9 +218,15 @@ def main():
     p_hyp_add.add_argument("--dir", dest="directory", default="config/hypotheses")
     p_hyp_add.set_defaults(func=cmd_hypothesis_add)
 
+    p_cal = sub.add_parser("calendar-import", help="convert calendar_export.csv (or a fallback "
+                                                     "CSV) into data/calendar.parquet (ROADMAP 4.2/4.4)")
+    p_cal.add_argument("csv")
+    p_cal.add_argument("--tz", default="ny+7", help="MUST match the --tz your `nylab run` used for bars")
+    p_cal.add_argument("--out", default="data/calendar.parquet")
+    p_cal.set_defaults(func=cmd_calendar_import)
+
     for name, phase in [
         ("export", "Phase 9 (mt5_export.py at the repo root still works standalone today)"),
-        ("calendar-import", "Phase 4"),
         ("snapshot", "Phase 8"),
     ]:
         p = sub.add_parser(name)

@@ -13,8 +13,13 @@ tests/fixtures/_replay_cache/
 
 # Reports & research state (grow over time; not source)
 reports/
+research/ledger.csv
 research/replay/shots/
 research/replay/drawings/
 research/replay/trades.csv
 research/replay/presets.json
 ny_lab_report/
+
+# Real broker exports (Akash's own MT5 data -- never source, and too big to commit)
+/EURUSD_*.csv
+/calendar_export.csv

@@ -109,11 +109,14 @@ hit rate already clears the 0.58 bar).
 
 ## Phase 4 — Economic calendar (1–2 days)
 Spec: SESSIONS_AND_CONTEXT §4.
-- [ ] 4.1 `mql5/ExportCalendar.mq5` (read-only script) + step-by-step instructions in README for compiling
+- [x] 4.1 `mql5/ExportCalendar.mq5` (read-only script) + step-by-step instructions in README for compiling
       in MetaEditor and running it. 4.2 `nylab calendar-import` (server→NY tz, parquet).
-- [ ] 4.3 Surprise z-scores, event families, per-session and per-day news features, availability rules.
-- [ ] 4.4 Fallback CSV import.
+- [x] 4.3 Surprise z-scores, event families, per-session and per-day news features, availability rules.
+- [x] 4.4 Fallback CSV import.
 **Accept:** On the user's real data, NFP events land at 08:30 NY in both summer and winter; FOMC at 14:00.
+Code + tests done (tests/test_calendar.py::test_at04_..., against a synthetic export built the same
+way ExportCalendar.mq5 writes real ones). Confirming this against Akash's ACTUAL calendar export is
+the next one-step-at-a-time task (compile+run the .mq5 in MetaEditor, then `nylab calendar-import`).
 
 ## Phase 5 — All sessions, session character, cross-session analysis (3–4 days)
 Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.

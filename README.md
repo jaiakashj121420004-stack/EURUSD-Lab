@@ -44,6 +44,32 @@ Maven simulator → daily automation → ongoing research.
 Progress and open questions are tracked in `docs/PROGRESS.md` (created once Phase 0 starts) so any new
 session can pick up exactly where the last one left off.
 
+## Phase 4 -- economic calendar (one-time, per broker)
+
+MT5's Python package can't read the economic calendar, only MQL5 can. `mql5/ExportCalendar.mq5` is
+a **read-only** script (it never places or touches a trade) that dumps the calendar to a CSV:
+
+1. In MT5, press **F4** to open MetaEditor.
+2. File > Open > browse to `mql5/ExportCalendar.mq5` in this folder > Open.
+3. Press **F7** to compile. It should compile with 0 errors (warnings are fine).
+4. Back in MT5's Navigator panel (Ctrl+N), open **Scripts**, find `ExportCalendar`, and drag it onto
+   any open chart (the symbol/timeframe don't matter -- it reads the calendar, not that chart's price).
+5. A dialog pops up with Inputs -- the defaults (5 years back, USD+EUR, importance >= low) are fine,
+   just click OK.
+6. Click the **Experts** tab at the bottom of MT5 and read the two lines it prints: how many rows it
+   wrote, and the earliest event date it found (that's the limit of MetaQuotes' own calendar history
+   for your broker -- not a bug if it's later than 5 years back).
+7. Find `calendar_export.csv` in your MT5 data folder: File > Open Data Folder > `MQL5/Files/`. Copy
+   it into this project folder (`C:\Trading\eurusd-lab\`).
+8. Back in PowerShell (venv active): `python -m nylab calendar-import calendar_export.csv`
+9. `python -m nylab run "<your csv>.csv"` will now pick up `data/calendar.parquet` automatically and
+   print how many USD/EUR rows it attached.
+
+Calendar functions don't work inside the Strategy Tester -- step 4 must be a live chart, not a backtest.
+
+If your broker disables MQL5 calendar access (rare), a fallback CSV with columns
+`datetime_ny,currency,event,impact,actual,forecast,previous` works instead of steps 1-7.
+
 ## What the numbers mean
 - **Hit vs baseline:** an idea only matters if it happens more often than on all days.
 - **m / Bonferroni:** the more ideas tested, the stricter the bar — otherwise luck looks like an edge.

@@ -23,7 +23,7 @@ def load_bars(path: str) -> pd.DataFrame:
         tcol = pd.to_datetime(df[cols["date"]].astype(str) + " " + df[time_col].astype(str))
     else:
         raw = df[cols["time"]]
-        tcol = pd.to_datetime(raw, unit="s") if np.issubdtype(raw.dtype, np.number) else pd.to_datetime(raw)
+        tcol = pd.to_datetime(raw, unit="s") if pd.api.types.is_numeric_dtype(raw.dtype) else pd.to_datetime(raw)
 
     out = pd.DataFrame({"server": tcol})
     for k in ("open", "high", "low", "close"):
