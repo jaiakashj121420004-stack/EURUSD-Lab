@@ -359,14 +359,62 @@ directional-take-rate's direction matching, Silver Bullet stats' shape, and `tak
 against a real (small synthetic) bar series to exercise the actual `first_cross` machinery, not
 just a mocked one. `pytest -q`: **113 passed** (103 existing + 10 new), no regressions.
 
+### Phase 5.4 (done) — relational hypotheses with matrix-family counting
+
+**What's built:** SESSIONS_AND_CONTEXT.md S5.2's rule -- "once you pick a cell because it
+looked extreme, you must count every cell of that matrix as tested" -- as real machinery, not
+just a comment:
+- `nylab/hyp_loader.py`'s `Hypothesis` dataclass gained an optional `matrix_shape: (rows, cols)`
+  field, parsed from a YAML `matrix_shape: [rows, cols]` key and validated (both positive ints)
+  at load time, same as every other field.
+- `nylab/ledger.py` gained a `matrix_cells` column (default 1 for an ordinary hypothesis) and
+  `distinct_m()` now SUMS that weight over distinct (id, version) pairs instead of just
+  counting pairs -- a hypothesis with `matrix_shape: [6, 6]` contributes 36 to `m`, not 1.
+  `research/ledger.csv` predates this (Akash's own real ledger has 45 rows from Phases 3-4, all
+  12-column, no matrix_cells) -- `append()` migrates it in place, exactly once, the first time
+  a new row is appended (adds `matrix_cells=1` to every existing row, changing no other value),
+  so his real ledger will pick this up automatically the next time he runs `nylab run` for real.
+  `distinct_m()` also tolerates reading a not-yet-migrated file directly (defaults to weight 1).
+- `nylab/hyp_engine.py` uses the same weighting when computing `m`/`bonferroni_alpha` and when
+  writing each hypothesis's own `matrix_cells` back to its ledger row.
+- **A fix this surfaced, not planned up front:** `lon.character`-style SESSION-table columns
+  only existed in `nylab.days.COLUMN_DOCS` once `nylab.sessions.column_docs()` had been merged
+  in, which previously only happened inside `nylab run`'s own `cmd_run()` -- too late for a
+  hypothesis loaded in isolation (a test, `nylab hypothesis add`, anything that doesn't go
+  through the full CLI). Moved the merge to `nylab/hyp_loader.py`'s own import time instead
+  (no circular import: sessions.py imports FROM days.py, hyp_loader.py importing sessions.py is
+  a one-way dependency) -- every path that touches a hypothesis file already imports hyp_loader
+  first, so the registration is now unconditional rather than order-dependent.
+- **New hypothesis:** `config/hypotheses/H016.yaml` -- SESSIONS_AND_CONTEXT S5.2's own worked
+  example ("London chop -> NY AM KZ reversal"), promoted from the lon->nyam_kz CHARACTER
+  transition matrix (6x6=36 cells). Confirmed on Akash's real data: `ledger_total_tests` (the
+  report's name for `m`) goes from 15 to 51 (15 + 36) the moment H016 is loaded, and
+  `bonferroni_alpha` moves from 0.05/15 to 0.05/51 accordingly -- exactly the stricter bar the
+  spec intends. H016 itself did not reach `survives-oos` on the real data (p=0.123, well short).
+
+**Test-suite ripple, expected and fixed, not a regression:** four Phase 1/3 tests hardcoded
+"15 hypotheses" as a golden invariant (`test_load_all_loads_the_15_ported_hypotheses`,
+`test_hypotheses_csv_matches_golden`, `test_summary_json_written`, and the three AT tests'
+shared `m == 15` check). Updated each to expect 16 hypotheses / m=51, while keeping the actual
+v0-parity assertions (the first 15 rows' numbers still matching v0's golden fixture exactly) --
+adding a real 16th hypothesis is Phase 5.4 working as intended, not something to hide from the
+golden tests. The AT-01/AT-02 fixtures also needed the session-table attach step added to their
+own `_build_days()` helper (mirroring `cmd_run`'s real pipeline), since H016's condition needs
+`lon_character` to actually exist in the day table being evaluated, not just be registered in
+COLUMN_DOCS.
+
+**Tests:** added `test_matrix_shape_*` (3, in `tests/test_hyp_loader.py`) and 4 ledger tests
+(`tests/test_ledger.py`) for the weighting/migration/persistence behavior specifically.
+`pytest -q`: **120 passed** (113 existing/updated + 7 new), full `nylab run` re-confirmed on
+Akash's real 5-year data (~18-47s depending on machine load, still well under AT-04's 90s).
+
 ## Next up
 
-Continuing **Phase 5**: ticket 5.4 (relational hypotheses -- promoting a matrix cell to a
-counted hypothesis, with the matrix-family multiple-testing rule) is next, then 5.5 (report
-sections) and 5.6 (label validation with Akash -- needs him).
+Continuing **Phase 5**: 5.5 (report sections, SESSIONS §6) is next, then 5.6 (label validation
+with Akash on 30 replay days -- needs his own participation).
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
-sessions + session character (in progress -- 5.1/5.2/5.3 done), 6 Replay trainer v2, 7 ICT
+sessions + session character (in progress -- 5.1/5.2/5.3/5.4 done), 6 Replay trainer v2, 7 ICT
 features & models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research
 loop (ongoing).

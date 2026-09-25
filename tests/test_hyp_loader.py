@@ -13,11 +13,59 @@ def _write(tmp_path, name, text):
     return str(p)
 
 
-def test_load_all_loads_the_15_ported_hypotheses():
+def test_load_all_loads_the_15_ported_hypotheses_plus_H016():
+    """H001-H015 are v0's ported hypotheses; H016 (ROADMAP 5.4) is the first NEW one, a
+    cross-session matrix-family promotion (nylab.cross_session) -- see its own YAML notes."""
     hyps = load_all("config/hypotheses")
-    assert len(hyps) == 15
-    assert {h.id for h in hyps} == {f"H{i:03d}" for i in range(1, 16)}
+    assert len(hyps) == 16
+    assert {h.id for h in hyps} == {f"H{i:03d}" for i in range(1, 17)}
     assert all(h.version for h in hyps)
+    h016 = next(h for h in hyps if h.id == "H016")
+    assert h016.matrix_shape == (6, 6)
+
+
+def test_matrix_shape_must_be_two_positive_ints(tmp_path):
+    path = _write(tmp_path, "bad_matrix.yaml", """
+        id: HBADMATRIX
+        version: "1.0"
+        title: "bad matrix_shape"
+        decision_time_h: 5.0
+        condition: "lon_character == 'chop'"
+        outcome: "ny_drive > 0"
+        baseline: "ny_drive > 0"
+        matrix_shape: [6, 0]
+    """)
+    with pytest.raises(HypothesisLoadError, match="matrix_shape"):
+        load_one(path)
+
+
+def test_matrix_shape_accepted_and_stored_as_tuple(tmp_path):
+    path = _write(tmp_path, "good_matrix.yaml", """
+        id: HGOODMATRIX
+        version: "1.0"
+        title: "good matrix_shape"
+        decision_time_h: 5.0
+        condition: "lon_character == 'chop'"
+        outcome: "ny_drive > 0"
+        baseline: "ny_drive > 0"
+        matrix_shape: [6, 6]
+    """)
+    h = load_one(path)
+    assert h.matrix_shape == (6, 6)
+
+
+def test_ordinary_hypothesis_has_no_matrix_shape(tmp_path):
+    path = _write(tmp_path, "ordinary.yaml", """
+        id: HORDINARY
+        version: "1.0"
+        title: "no matrix"
+        decision_time_h: 5.0
+        condition: "lon_dir > 0"
+        outcome: "ny_drive > 0"
+        baseline: "ny_drive > 0"
+    """)
+    h = load_one(path)
+    assert h.matrix_shape is None
 
 
 def test_condition_using_a_too_late_column_is_rejected(tmp_path):

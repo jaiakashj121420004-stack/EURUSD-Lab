@@ -72,23 +72,31 @@ def test_hypotheses_csv_matches_golden(nylab_run):
     verdict logic with the real YAML+DSL+ledger+Bonferroni/BH engine -- see
     docs/PROGRESS.md's Phase 3 section -- so the columns and verdict methodology are new by
     design; only the underlying per-hypothesis sample counts and hit rates must still match
-    v0 exactly, since those come from the SAME 15 conditions evaluated on the SAME data)."""
+    v0 exactly, since those come from the SAME 15 conditions evaluated on the SAME data).
+    ROADMAP 5.4 added a 16th hypothesis, H016 (a matrix-family promotion, not one v0 ever
+    had) -- config/hypotheses/*.yaml loads in sorted glob order, so it sorts AFTER H001-H015
+    and doesn't disturb their alignment with the v0 golden file, which only ever had 15 rows."""
     gold = pd.read_csv(GOLDEN / "hypotheses.csv")
     new = pd.read_csv(nylab_run / "hypotheses.csv")
-    assert len(gold) == len(new) == 15
+    assert len(gold) == 15
+    assert len(new) == 16
+    assert list(new["id"])[:15] == [f"H{i:03d}" for i in range(1, 16)]
+    assert new["id"].iloc[15] == "H016"
+    ported = new.iloc[:15]
     for col in ("n", "hit", "baseline", "is_hit", "oos_hit", "oos_n"):
-        diff = (gold[col].astype(float) - new[col].astype(float)).abs()
-        ok = (diff <= 1e-9) | (gold[col].isna() & new[col].isna())
+        diff = (gold[col].astype(float) - ported[col].astype(float)).abs()
+        ok = (diff <= 1e-9) | (gold[col].isna() & ported[col].isna())
         assert ok.all(), f"{col} diverged from v0 golden at row(s) {list(diff[~ok].index)}"
 
 
 def test_summary_json_written(nylab_run):
     import json
     summ = json.loads((nylab_run / "summary.json").read_text())
-    assert summ["ledger_total_tests"] == 15
+    # ROADMAP 5.4: 15 ordinary hypotheses + H016 (a 6x6=36-cell matrix promotion) = 51.
+    assert summ["ledger_total_tests"] == 51
     assert summ["data"]["days"] == 1305
     assert summ["data"]["tz_sanity"] == "ok"
-    assert len(summ["hypotheses"]) == 15
+    assert len(summ["hypotheses"]) == 16
     assert summ["models"][0]["name"] == "london_sweep_reversal"
 
 

@@ -17,8 +17,20 @@ import os
 
 import yaml
 
+from nylab import config as _cfg
 from nylab import hyp_dsl
+from nylab import sessions as _sessions_mod
 from nylab.days import COLUMN_DOCS
+
+# ROADMAP 5.4: a hypothesis's condition may reference a SESSION-table column (`lon.character`,
+# `nyam_kz.character`, ...). Those columns only exist in COLUMN_DOCS once nylab.sessions has
+# registered them -- days.py itself can't do this merge (nylab.sessions imports days.window()/
+# first_cross(), so days importing sessions back would be a cycle), and cmd_run's own merge in
+# nylab/__main__.py only runs once `nylab run` actually executes, which is too late for a
+# hypothesis loaded/validated in isolation (a test, `nylab hypothesis add`, a future `nylab
+# hypothesis check`). So this module -- which every one of those paths already imports before
+# touching a hypothesis file -- does the merge itself, once, at import time.
+COLUMN_DOCS.update(_sessions_mod.column_docs(_cfg.sessions()))
 
 
 class HypothesisLoadError(ValueError):
@@ -39,6 +51,9 @@ class Hypothesis:
     family: str | None = None
     codex_ref: str = ""
     notes: str = ""
+    matrix_shape: tuple[int, int] | None = None  # ROADMAP 5.4: [rows, cols] if this hypothesis
+    # was promoted from a nylab.cross_session transition matrix -- see nylab/ledger.py's
+    # docstring. None (the default) means an ordinary, non-matrix hypothesis (weight 1 in m).
 
 
 def _check_lookahead(hyp_id: str, condition: str, decision_time_h: float) -> None:
@@ -63,6 +78,15 @@ def load_one(path: str) -> Hypothesis:
     if "baseline" not in raw and "baseline_p0" not in raw:
         raise HypothesisLoadError(f"{path}: needs either 'baseline' (an expression) or 'baseline_p0' (a literal)")
 
+    matrix_shape = raw.get("matrix_shape")
+    if matrix_shape is not None:
+        if (not isinstance(matrix_shape, (list, tuple)) or len(matrix_shape) != 2
+                or any(int(x) <= 0 for x in matrix_shape)):
+            raise HypothesisLoadError(
+                f"{path}: matrix_shape must be [rows, cols] of positive integers, got {matrix_shape!r}"
+            )
+        matrix_shape = (int(matrix_shape[0]), int(matrix_shape[1]))
+
     hyp = Hypothesis(
         id=str(raw["id"]), version=str(raw.get("version", "1.0")), title=raw.get("title", raw["id"]),
         decision_time_h=float(raw["decision_time_h"]), condition=str(raw["condition"]),
@@ -70,6 +94,7 @@ def load_one(path: str) -> Hypothesis:
         baseline_p0=(float(raw["baseline_p0"]) if raw.get("baseline_p0") is not None else None),
         min_n=int(raw.get("min_n", 0)), family=raw.get("family"),
         codex_ref=raw.get("codex_ref", ""), notes=raw.get("notes", ""),
+        matrix_shape=matrix_shape,
     )
 
     # Parse + whitelist-validate every expression up front (never look-ahead-checked for

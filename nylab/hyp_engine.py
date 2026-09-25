@@ -34,8 +34,12 @@ def evaluate(d: pd.DataFrame, hyps: list, split_date, run_id: str,
     ns = {col: d[col] for col in d.columns}
     is_mask = d.index < split_date
 
-    m = ledger_mod.distinct_m(ledger_path, extra_ids=[(h.id, h.version) for h in hyps])
+    def _cells(h):
+        return h.matrix_shape[0] * h.matrix_shape[1] if h.matrix_shape else 1
+
+    m = ledger_mod.distinct_m(ledger_path, extra_ids=[(h.id, h.version, _cells(h)) for h in hyps])
     alpha_bonf = ledger_mod.bonferroni_alpha(m)
+    cells_by_id = {(h.id, h.version): _cells(h) for h in hyps}
 
     raw = []
     for h in hyps:
@@ -106,6 +110,6 @@ def evaluate(d: pd.DataFrame, hyps: list, split_date, run_id: str,
     ledger_rows = [dict(
         run_id=run_id, timestamp=ts, kind="hypothesis", id=r["id"], version=r["version"],
         n=r["n"], stat=r["z"], p=r["p"], is_metric=r["is_hit"], oos_metric=r["oos_hit"],
-        verdict=r["verdict"], notes="",
+        verdict=r["verdict"], notes="", matrix_cells=cells_by_id[(r["id"], r["version"])],
     ) for r in raw]
     return rows, ledger_rows, m, alpha_bonf

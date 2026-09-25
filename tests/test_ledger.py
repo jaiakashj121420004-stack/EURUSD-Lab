@@ -52,6 +52,57 @@ def test_changing_version_does_increase_m(tmp_path):
     assert m_v2 == m_v1 + 1
 
 
+def test_matrix_family_weight_counts_rows_times_cols(tmp_path):
+    """ROADMAP 5.4: a hypothesis with matrix_shape=(rows, cols) counts as rows*cols tests,
+    not 1, via the 3-tuple (id, version, matrix_cells) extra_ids form."""
+    path = str(tmp_path / "ledger.csv")
+    m = ledger_mod.distinct_m(path, extra_ids=[("H001", "1.0", 1), ("H016", "1.0", 36)])
+    assert m == 37
+
+
+def test_matrix_cells_persisted_and_read_back(tmp_path):
+    path = str(tmp_path / "ledger.csv")
+    ledger_mod.append([
+        dict(run_id="r1", timestamp="t", kind="hypothesis", id="H001", version="1.0", n=1, stat=0, p=1,
+             is_metric=None, oos_metric=None, verdict="noise", notes="", matrix_cells=1),
+        dict(run_id="r1", timestamp="t", kind="hypothesis", id="H016", version="1.0", n=1, stat=0, p=1,
+             is_metric=None, oos_metric=None, verdict="noise", notes="", matrix_cells=36),
+    ], path=path)
+    assert ledger_mod.distinct_m(path) == 37
+    # re-running the same (id, version) pairs again must not inflate m further.
+    m_again = ledger_mod.distinct_m(path, extra_ids=[("H001", "1.0", 1), ("H016", "1.0", 36)])
+    assert m_again == 37
+
+
+def test_old_schema_ledger_without_matrix_cells_defaults_to_weight_1(tmp_path):
+    """A ledger.csv written before ROADMAP 5.4 has no matrix_cells column at all --
+    distinct_m() must still work (defaulting every row's weight to 1), not crash."""
+    path = tmp_path / "ledger.csv"
+    path.write_text(
+        "run_id,timestamp,kind,id,version,n,stat,p,is_metric,oos_metric,verdict,notes\n"
+        "r1,t,hypothesis,H001,1.0,100,1.0,0.3,0.5,0.5,noise,\n"
+        "r1,t,hypothesis,H002,1.0,100,1.0,0.3,0.5,0.5,noise,\n"
+    )
+    assert ledger_mod.distinct_m(str(path)) == 2
+
+
+def test_append_migrates_old_schema_ledger_in_place(tmp_path):
+    """append() widens an old-schema file (no matrix_cells column) in place, WITHOUT changing
+    any existing row's own values, so subsequent appends have one consistent column set."""
+    path = tmp_path / "ledger.csv"
+    path.write_text(
+        "run_id,timestamp,kind,id,version,n,stat,p,is_metric,oos_metric,verdict,notes\n"
+        "r1,t,hypothesis,H001,1.0,100,1.0,0.3,0.5,0.5,noise,\n"
+    )
+    ledger_mod.append([dict(run_id="r2", timestamp="t2", kind="hypothesis", id="H016", version="1.0",
+                             n=50, stat=1.5, p=0.1, is_metric=0.3, oos_metric=0.3, verdict="noise",
+                             notes="", matrix_cells=36)], path=str(path))
+    df = ledger_mod.load(str(path))
+    assert len(df) == 2
+    assert df.loc[0, "run_id"] == "r1" and df.loc[0, "matrix_cells"] == 1  # migrated, unchanged otherwise
+    assert df.loc[1, "run_id"] == "r2" and df.loc[1, "matrix_cells"] == 36
+
+
 def test_bonferroni_alpha():
     assert ledger_mod.bonferroni_alpha(15) == 0.05 / 15
     assert ledger_mod.bonferroni_alpha(0) == 0.05  # no ledger yet -- don't divide by zero

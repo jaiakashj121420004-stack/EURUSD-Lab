@@ -1,0 +1,19 @@
+id: H016
+version: '1.0'
+title: London chop -> NY AM killzone reversal of the London range
+decision_time_h: 5.0
+condition: lon.character == 'chop'
+outcome: nyam_kz.character == 'reversal'
+baseline: nyam_kz.character == 'reversal'
+family: cross_session_lon_nyamkz_character
+matrix_shape: [6, 6]
+notes: |
+  ROADMAP 5.4's worked example, matching SESSIONS_AND_CONTEXT.md S5.2's own H031 sketch
+  ("London chop -> NY AM KZ reversal"). Promoted from the lon->nyam_kz CHARACTER
+  transition matrix (a 6x6 matrix -- chop/normal/quiet/range_both/reversal/trend on
+  each axis -- built the same way nylab.cross_session.run_default_character_matrices()
+  builds its S5.1 default pairs, even though lon->nyam_kz isn't itself one of those 4
+  defaults). matrix_shape [6, 6] makes this promotion count as 36 tests toward m
+  (S5.2's matrix-family rule -- "once you pick a cell because it looked extreme, you
+  must count every cell of that matrix as tested"), not 1, via the matrix_cells
+  weighting in nylab/ledger.py.

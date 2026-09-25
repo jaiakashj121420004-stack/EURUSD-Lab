@@ -73,13 +73,12 @@ def cmd_run(args):
 
     # ROADMAP Phase 5.1/5.2: the SESSION table (all sessions except cbdr) + character labels +
     # day types, wide-joined onto `d` so hypothesis YAMLs can use dotted cross-session syntax
-    # (`lon.character`, `nyam_full.took_prev_high`, `day.has_fomc`). COLUMN_DOCS must be
-    # extended BEFORE hyp_loader.load_all() runs its look-ahead check, since a hypothesis's
-    # condition may reference a session column. days.py can't import nylab.sessions itself
-    # (sessions.py imports days.py's window()/first_cross() -- that would be a cycle), so the
-    # registration happens here instead, exactly once per run.
+    # (`lon.character`, `nyam_full.took_prev_high`, `day.has_fomc`). COLUMN_DOCS's own
+    # registration for these columns already happened at nylab.hyp_loader's import time (see
+    # that module) -- imported above via `from nylab import hyp_engine, hyp_loader`, so it's
+    # already done by the time we get here, before hyp_loader.load_all() runs its look-ahead
+    # check further down.
     sessions_cfg = cfg.sessions()
-    days_mod.COLUMN_DOCS.update(sessions_mod.column_docs(sessions_cfg))
     session_tables = sessions_mod.build_all_sessions(df, d, cal, sessions_cfg, windows["pip"])
     d = sessions_mod.attach_session_features(d, session_tables)
     skipped = d.attrs.get("sessions_skipped_columns")

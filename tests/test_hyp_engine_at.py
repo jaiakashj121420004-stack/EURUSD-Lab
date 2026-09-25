@@ -21,18 +21,27 @@ import pytest
 from nylab import config as cfg
 from nylab import days as days_mod
 from nylab import hyp_engine, hyp_loader
+from nylab import sessions as sessions_mod
 from nylab.data import loader, timezones
 
 ROOT = Path(__file__).parent.parent
 
 
 def _build_days(csv_name: str) -> pd.DataFrame:
+    """Mirrors nylab.__main__.cmd_run's real pipeline through the Phase 5 session-table attach
+    step (no calendar -- these fixtures have none, and none of the ported hypotheses need
+    news columns), since `hyp_loader.load_all()` now includes H016 (ROADMAP 5.4), whose
+    condition references `lon.character` -- a SESSION-table column, not a legacy DAY one."""
     raw = loader.load_bars(str(ROOT / "tests" / "fixtures" / csv_name))
     raw["ny"] = timezones.to_new_york(raw["server"], "ny+7")
     raw["td"] = (raw["ny"] + pd.Timedelta(hours=7)).dt.normalize()
     raw["h"] = (raw["ny"] - (raw["td"] - pd.Timedelta(hours=7))).dt.total_seconds() / 3600.0 - 7
     raw = raw[raw["td"].dt.dayofweek < 5].reset_index(drop=True)
-    return days_mod.build_days(raw, cfg.legacy_windows())
+    d = days_mod.build_days(raw, cfg.legacy_windows())
+    sessions_cfg = cfg.sessions()
+    tables = sessions_mod.build_all_sessions(raw, d, None, sessions_cfg, cfg.legacy_windows()["pip"])
+    d = sessions_mod.attach_session_features(d, tables)
+    return d.join(sessions_mod.build_day_types(d))
 
 
 @pytest.fixture(scope="module")
@@ -68,8 +77,9 @@ def test_at02_planted_edge_is_found(hyps, tmp_path):
 def test_at01_and_at02_together_on_same_ledger(hyps, tmp_path):
     """The ledger is shared across runs in real use (ROADMAP 3.4) -- running AT-01 then AT-02
     against the SAME ledger file must not change either result: m only grows by genuinely new
-    (id, version) pairs, and since both runs use the identical 15 hypotheses at version 1.0,
-    m should stay 15 throughout, not 30."""
+    (id, version) pairs, and since both runs use the identical 16 hypotheses at version 1.0
+    (15 ordinary + H016, a 6x6=36-cell matrix promotion, ROADMAP 5.4), m should stay
+    15 + 36 = 51 throughout, not 102."""
     ledger_path = str(tmp_path / "shared_ledger.csv")
     d_clean = _build_days("EURUSD_M5_synth_clean_5y.csv")
     split_clean = d_clean.index[int(len(d_clean) * 0.7)]
@@ -81,7 +91,7 @@ def test_at01_and_at02_together_on_same_ledger(hyps, tmp_path):
     split_planted = d_planted.index[int(len(d_planted) * 0.7)]
     rows2, ledger_rows_2, m2, _ = hyp_engine.evaluate(d_planted, hyps, split_planted, run_id="run2", ledger_path=ledger_path)
 
-    assert m1 == 15
-    assert m2 == 15, "re-running the same 15 (id, version) pairs must not inflate m"
+    assert m1 == 51
+    assert m2 == 51, "re-running the same 16 (id, version) pairs must not inflate m"
     h005 = rows2[rows2["id"] == "H005"].iloc[0]
     assert h005["verdict"] == "survives-oos"
