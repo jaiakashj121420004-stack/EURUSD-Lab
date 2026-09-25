@@ -3,7 +3,7 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 3 (ledger + honest stats) done, confirmed on Akash's real 5-year EURUSD data. Phase 4 (economic calendar) code done and unit-tested; waiting on Akash to run mql5/ExportCalendar.mq5 in MetaEditor to confirm it against his real broker calendar.
+## Status: Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR). Ready for Phase 5.
 
 Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
 call: keep building through the phases on the automated tests alone, and he'll sit down and look
@@ -226,9 +226,17 @@ Same three as after Phase 1 (Maven program confirmation, broker tz convention, C
   surprise-z min-prior-count and no-future-leak guarantee, day-flag scheduling + per-session window
   boundaries including the exclusive-upper-bound edge case, and the COLUMN_DOCS registration).
   `pytest -q`: **87 passed** (66 Phase 0–3 + 21 new).
-- **Still needs Akash:** running the actual `.mq5` script in MetaEditor against his real MT5
-  calendar and re-running `nylab run` on his real export — that's the literal "on the user's real
-  data" half of the Accept line, and it's the next one-step-at-a-time task below.
+- **Confirmed on Akash's real data (2026-09-25):** compiled and ran `ExportCalendar.mq5` on his
+  MetaQuotes-Demo account (34,475 rows written, earliest event 2021-09-26 -- matches his 5-year
+  price history almost exactly). Hit one real bug doing this: MQL5's `FileOpen(..., FILE_ANSI, ...)`
+  writes the CSV in Windows' ANSI codepage, not UTF-8, and an event name with a non-ASCII
+  character crashed `pd.read_csv`'s default utf-8 read. Fixed in `nylab/calendar_io.py` with a
+  utf-8 -> cp1252 -> latin-1 fallback chain (latin-1 never raises, so import can't hard-crash on
+  an encoding it doesn't recognize). After the fix: `nylab calendar-import` loaded 34,075 events
+  (18,454 USD / 15,621 EUR -- the small drop from 34,475 is dedup + blank-row filtering doing its
+  job), and `nylab run` printed "attached news features from data/calendar.parquet" and produced
+  the identical hypothesis/report result as before -- confirming the attach step is genuinely
+  additive, not just additive in theory.
 
 **Design choices worth flagging:**
 - `surprise_z = surprise / stdev(prior surprises)` is NOT demeaned (no `- mean` term) — that's
@@ -243,15 +251,11 @@ Same three as after Phase 1 (Maven program confirmation, broker tz convention, C
 
 ## Next up
 
-**Phase 4 confirmation (one step at a time, needs Akash's MT5/MetaEditor):** compile and run
-`mql5/ExportCalendar.mq5` (README.md's "Phase 4" section has the exact steps), then
-`python -m nylab calendar-import calendar_export.csv`, then re-run `python -m nylab run` and check
-it prints "attached news features from data/calendar.parquet" with a plausible USD/EUR row count.
-Once that's confirmed, Phase 4 is fully accepted and we move to **Phase 5 — all sessions, session
-character, cross-session analysis**.
+Moving to **Phase 5 — all sessions, session character, cross-session analysis** (SESSIONS_AND_CONTEXT.md
+full session table + the relational/cross-session layer). This is a pure-Python phase -- no
+Windows/MT5 steps expected until we're back to something export- or replay-related.
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
-2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (code done,
-confirmation pending), 5 All sessions + session character (next), 6 Replay trainer v2, 7 ICT
-features & models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop
-(ongoing).
+2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
+sessions + session character (next), 6 Replay trainer v2, 7 ICT features & models, 8 Verification/
+robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).
