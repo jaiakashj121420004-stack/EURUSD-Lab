@@ -62,7 +62,8 @@ def test_build_payload_shape_and_bar_window_filter():
     tds = lv.sample_days(days, n=5, seed=3)
     bars = _fake_bars_for(tds)
     sessions_cfg = {"asia": (-4.0, 0.0), "lon": (0.0, 5.0), "nyam": (5.0, 12.0),
-                    "nyam_kz": (5.0, 8.0), "nyam_sb": (8.0, 9.0), "nypm": (12.0, 16.0)}
+                    "lon_ny_gap": (5.0, 7.0), "nyam_kz": (5.0, 8.0), "nyam_sb": (8.0, 9.0),
+                    "nypm": (12.0, 16.0)}
     payload = lv.build_payload(bars, days, sessions_cfg, tds)
     assert len(payload["days"]) == len(tds)
     d0 = payload["days"][0]
@@ -76,7 +77,8 @@ def test_render_html_embeds_data_and_has_no_leftover_placeholders():
     tds = lv.sample_days(days, n=5, seed=3)
     bars = _fake_bars_for(tds)
     sessions_cfg = {"asia": (-4.0, 0.0), "lon": (0.0, 5.0), "nyam": (5.0, 12.0),
-                    "nyam_kz": (5.0, 8.0), "nyam_sb": (8.0, 9.0), "nypm": (12.0, 16.0)}
+                    "lon_ny_gap": (5.0, 7.0), "nyam_kz": (5.0, 8.0), "nyam_sb": (8.0, 9.0),
+                    "nypm": (12.0, 16.0)}
     payload = lv.build_payload(bars, days, sessions_cfg, tds)
     html = lv.render_html(payload)
     assert "%%" not in html

@@ -18,6 +18,7 @@ false positives.
 | `lon` | London killzone | 02:00–05:00 | 2 … 5 | 5 | |
 | `lon_sb` | London Silver Bullet | 03:00–04:00 | 3 … 4 | 4 | inside `lon` |
 | `lon_full` | London session (context) | 02:00–07:00 | 2 … 7 | 7 | optional, for "London overall" stats |
+| `lon_ny_gap` | London→NY gap | 05:00–07:00 | 5 … 7 | 7 | added 2026-09-25 at Akash's request; untracked stretch between `lon`'s close and `nyam_kz`'s start |
 | `nyam` | NY AM session | 07:00–12:00 | 7 … 12 | 12 | |
 | `nyam_kz` | NY AM killzone | 07:00–10:00 | 7 … 10 | 10 | |
 | `nyam_sb` | NY AM Silver Bullet | 10:00–11:00 | 10 … 11 | 11 | |
@@ -31,6 +32,9 @@ previous week `pwh/pwl`, current week-to-date high/low (available at each bar).
 
 **Session ordering for "earlier → later" analysis:** `cbdr → asia → lon → nyam → lunch → nypm`
 (Silver Bullets are sub-windows analysed as *outcome* windows, not as separate chain links).
+`lon_ny_gap` is NOT inserted into this chain -- its raid features look back at `lon` (same
+predecessor `nyam`/`nyam_kz`/`nyam_sb`/`lon_close` already use), so adding it doesn't change what
+"immediately preceding session" means for any already-frozen column.
 
 ---
 

@@ -29,8 +29,22 @@ silently collide with (and shadow the meaning of) the existing "nyam_*" legacy c
     `nyam_*`): ALL of its columns, raw price included, are emitted under the prefix
     `nyam_full_` instead, i.e. a hypothesis writes `nyam_full.high` / `nyam_full.character`,
     never `nyam.high` (that stays the legacy 07:00-10:00 number).
-  - every other id (`lon_sb`, `lon_full`, `nyam_sb`, `lunch`, `nypm`, `nypm_sb`, `lon_close`)
-    has no legacy equivalent and no name collision: full column set under its own id.
+  - every other id (`lon_sb`, `lon_full`, `nyam_sb`, `lunch`, `nypm`, `nypm_sb`, `lon_close`,
+    `lon_ny_gap`) has no legacy equivalent and no name collision: full column set under its
+    own id.
+
+NOTE on `lon_ny_gap` (added 2026-09-25, Akash's own request after reviewing the first label-
+validation round -- "observe the time in between sessions, especially London to NY"): the
+07:00-... London killzone (`lon`) ends at h=5.0 and the NY AM killzone (`nyam_kz`) starts at
+h=7.0; nothing tracked that 2-hour gap before. It's added as its own full session (window
+5.0-7.0), predecessor `lon` (same as `nyam`/`nyam_kz`/`nyam_sb`/`lon_close` already use) --
+so its raid/character features ask "did the gap take out London's high/low", which is the
+actual question a London-to-NY transition is about. Deliberately NOT inserted into the
+asia->lon->nyam->lunch->nypm chain itself (i.e. `nyam`'s own `_PREV_IN_CHAIN` stays `lon`,
+unchanged) -- that would silently redefine what "immediately preceding session" means for
+`nyam`/`nyam_kz`/`nyam_sb`'s already-computed raid features, which RESEARCH_PROTOCOL.md's
+frozen-thresholds rule says needs its own explicit decision, not a side effect of adding an
+unrelated session.
 
 NOTE on `raids`/`first_raid` scope: SESSIONS_AND_CONTEXT S2 lists candidate levels as "prior
 sessions' highs/lows (same td), pdh/pdl, pwh/pwl, o_mid". This module raids against the
@@ -54,9 +68,10 @@ from nylab import calendar_features
 from nylab import ict_features as ictf
 from nylab.days import first_cross, window
 
-# The 11 SESSIONS_AND_CONTEXT S1 ids this module builds (cbdr excluded, see module docstring).
+# The 11 SESSIONS_AND_CONTEXT S1 ids this module builds (cbdr excluded, see module docstring),
+# plus `lon_ny_gap` (added 2026-09-25, not part of the original spec -- see the docstring above).
 SESSION_IDS = ["asia", "lon", "lon_sb", "lon_full", "nyam", "nyam_kz", "nyam_sb",
-               "lunch", "nypm", "nypm_sb", "lon_close"]
+               "lunch", "nypm", "nypm_sb", "lon_close", "lon_ny_gap"]
 
 # S1's chain: asia -> lon -> nyam -> lunch -> nypm (cbdr excluded, Silver Bullets are outcome
 # windows not separate chain links). A sub/context window inherits its PARENT session's
@@ -64,7 +79,7 @@ SESSION_IDS = ["asia", "lon", "lon_sb", "lon_full", "nyam", "nyam_kz", "nyam_sb"
 _PREV_IN_CHAIN = {
     "asia": None,
     "lon": "asia", "lon_sb": "asia", "lon_full": "asia",
-    "nyam": "lon", "nyam_kz": "lon", "nyam_sb": "lon", "lon_close": "lon",
+    "nyam": "lon", "nyam_kz": "lon", "nyam_sb": "lon", "lon_close": "lon", "lon_ny_gap": "lon",
     "lunch": "nyam",
     "nypm": "lunch", "nypm_sb": "lunch",
 }

@@ -8,6 +8,7 @@ sessions:
   lon: [2, 5]
   lon_sb: [3, 4]
   lon_full: [2, 7]
+  lon_ny_gap: [5, 7]
   nyam: [7, 12]
   nyam_kz: [7, 10]
   nyam_sb: [10, 11]

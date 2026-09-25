@@ -610,20 +610,42 @@ rule and silently going stale is a real trap here) and a fresh 30-day review sam
 Akash's second review pass over this fresh sample -- needed before 5.6's checkbox flips (ticket's
 own accept criteria: >=80% agreement).
 
+**`lon_ny_gap` added (2026-09-25):** Akash picked option 1 (a proper named session, full
+first-class treatment) over the lighter descriptive-only alternative for his "observe the time
+in between sessions, especially London to NY" request. Added as a genuinely new session id --
+window 5.0-7.0 (the untracked stretch between `lon`'s 05:00 close and `nyam_kz`'s 07:00 start) --
+wired in everywhere the other 11 session ids are:
+- `config/windows.yaml` (`lon_ny_gap: [5, 7]`) and `docs/SESSIONS_AND_CONTEXT.md`'s S1 table.
+- `nylab/sessions.py`'s `SESSION_IDS` (now 12) and `_PREV_IN_CHAIN` (predecessor = `lon`, same as
+  `nyam`/`nyam_kz`/`nyam_sb`/`lon_close` already use). Deliberately NOT inserted into the
+  `asia->lon->nyam->lunch->nypm` chain itself -- `nyam`'s own predecessor stays `lon`, unchanged,
+  so this addition can't silently redefine what an already-frozen raid feature means.
+- `nylab/cross_session.py`'s `DEFAULT_PAIRS` -- added `(lon, lon_ny_gap)` and
+  `(lon_ny_gap, nyam_kz)` so the character/direction transition matrices actually cover the
+  London-to-NY handoff, which was the point of the request.
+- `nylab/label_validate.py`'s `SESSIONS_TO_VALIDATE` -- added, so Akash can review its character
+  calls too.
+- `nylab/report/sessions_section.py` needed no changes -- section 5's table and the heatmap
+  already iterate `SESSION_IDS` generically.
+No new thresholds or rule logic here, just a new window reusing the exact same character/day-type
+machinery every other session already goes through -- so no separate "which numbers" decision was
+needed the way the trend-rule change was. Verified against real data after rebuilding the cache:
+1295 days, `lon_ny_gap_character` distribution is sensible (chop 49%, normal 16%, reversal 16%,
+trend 12%, quiet 7% -- not degenerate), median range ~18 pips. Full test suite (135 tests) passes.
+Fresh review sample regenerated (now 34 days -- the stratified floor grew by one to cover
+`lon_ny_gap`'s own rare labels) with all 6 sessions: `asia / lon / lon_ny_gap / nyam_kz /
+nyam_sb / nypm`.
+
 ## Next up
 
-1. Send Akash the fresh review page and score his second pass once he returns it.
-2. Scope his third request from the same message ("observe the time in between sessions,
-   especially London to NY") -- there is currently no named session covering h=5.0 (London's
-   close) to h=7.0 (NY AM killzone's start) in `cfg.sessions()`, so this needs a joint decision
-   on shape before any code: a new named session window (e.g. `lon_ny_gap`, 5.0-7.0) added
-   alongside the existing ones, vs. a lighter-weight descriptive addition to the cross-session
-   report (`nylab/cross_session.py` / report sections 7-9) that doesn't need a new session id at
-   all. Proposed to Akash, not yet applied.
+1. Send Akash the fresh review page (now covering all 6 sessions incl. `lon_ny_gap`) and score
+   his second pass once he returns it -- this is what decides whether 5.6's checkbox flips
+   (ticket's own accept criteria: >=80% agreement).
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
-sessions + session character (in progress -- 5.1-5.5 done, 5.6 in progress: trend rule v2 and
-session-set swap implemented and tested, fresh review sample generated, second review round
-pending), 6 Replay trainer v2, 7 ICT features & models, 8 Verification/robustness/prop
-simulation, 9 Daily automation, 10 Research loop (ongoing).
+sessions + session character (in progress -- 5.1-5.5 done, 5.6 in progress: trend rule v2,
+nyam_kz/nyam_sb swap, and the new lon_ny_gap session all implemented and tested, fresh 6-session
+review sample generated, second review round pending), 6 Replay trainer v2, 7 ICT features &
+models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop
+(ongoing).

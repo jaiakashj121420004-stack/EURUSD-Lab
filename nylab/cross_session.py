@@ -23,8 +23,11 @@ DESCRIPTIVE_BANNER = "DESCRIPTIVE -- not tested for significance (S5.1). Promote
 
 MIN_N = 25  # SESSIONS_AND_CONTEXT S5.1: grey out cells with fewer than this many days
 
-# S1's default pairs (S5.1) for the character/dir transition matrices.
-DEFAULT_PAIRS = [("asia", "lon"), ("lon", "nyam"), ("nyam", "nypm"), ("lon", "nypm")]
+# S1's default pairs (S5.1) for the character/dir transition matrices, plus lon->lon_ny_gap and
+# lon_ny_gap->nyam_kz (added 2026-09-25, Akash's own request -- the London-to-NY handoff is
+# exactly what `lon_ny_gap` (nylab/sessions.py) was added to observe).
+DEFAULT_PAIRS = [("asia", "lon"), ("lon", "nyam"), ("nyam", "nypm"), ("lon", "nypm"),
+                 ("lon", "lon_ny_gap"), ("lon_ny_gap", "nyam_kz")]
 SB_IDS = ("lon_sb", "nyam_sb", "nypm_sb")
 
 
