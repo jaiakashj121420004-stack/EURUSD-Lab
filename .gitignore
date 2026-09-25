@@ -18,6 +18,7 @@ research/replay/shots/
 research/replay/drawings/
 research/replay/trades.csv
 research/replay/presets.json
+research/label_validation/
 ny_lab_report/
 
 # Real broker exports (Akash's own MT5 data -- never source, and too big to commit)

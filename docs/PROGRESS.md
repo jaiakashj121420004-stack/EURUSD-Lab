@@ -466,15 +466,58 @@ section headers is present and H016's `matrix_cells=36` shows up in section 10, 
 is skipped gracefully (with its own explanatory text) when no calendar is attached, and every
 `<table>`/`<tr>` tag is properly closed. `pytest -q`: **124 passed** (120 existing + 4 new).
 
+## Phase 5.6 (tool built -- awaiting Akash's own review): label validation
+
+New module `nylab/label_validate.py` plus two CLI commands (`python -m nylab label-validate
+build` / `... score <answers.json> --meta <meta.json>`), reusing the same parquet cache the
+Phase 2 replay trainer reads (`data/cache/`) rather than re-running the pipeline.
+
+**Sampling (`sample_days()`):** ROADMAP 5.6 says "30 random days", but a pure uniform sample
+risks missing a rare label entirely -- PROGRESS.md's Phase 5.3 section already flagged
+`nyam_full`'s `trend` firing on only 2/~1300 days. So sampling is stratified-then-random: first
+guarantee at least one occurrence of every label that actually occurs, for each of 5 validated
+sessions (asia/lon/nyam_kz/nyam_full/nypm -- a disclosed scope cut to the sessions existing
+hypotheses/the example model actually condition on, not all 11 SESSION_IDS), then fill up to
+`n=30` with uniform-random days. The stratified floor is never trimmed back down even if it
+alone would exceed 30 (trimming it could silently drop the exact rare day it exists to protect)
+-- on Akash's real data this floor fits inside 30 days with `MIN_PER_LABEL=1`, so the sample is
+exactly 30, and every one of the 5 sessions' `trend` label is represented at least once.
+
+**The review page:** `label-validate build` writes one self-contained HTML file (~30 days,
+~400KB, no server/internet needed) -- each day shows a canvas candlestick chart of the full
+trading day with the 5 validated sessions shaded and their computed `character` label printed
+directly on the chart, plus a table with Agree/Disagree buttons and an optional note field for
+every session's label and the day's `day_type`. A "Download my answers" button exports a JSON
+file Akash sends back.
+
+**Scoring (`label-validate score`):** pools agreement by the LABEL VALUE (e.g. every `reversal`
+call across all 5 sessions counted together), not per-session -- SESSIONS_AND_CONTEXT S3 means
+`character` to be the same qualitative idea regardless of which session produced it. `day_type`
+is scored as its own family (S2, not S3). Any label under 80% agreement is flagged in the CLI
+output, per ROADMAP 5.6's accept bar.
+
+**Not yet done:** Akash hasn't reviewed the sample yet -- this ticket stays unchecked in
+ROADMAP.md until he has, agreement is tabulated for real, and (per RESEARCH_PROTOCOL.md's
+"session-character thresholds are frozen once validated") any threshold adjustment below 80% is
+made together with him, not unilaterally.
+
+**Tests:** `tests/test_label_validate.py` (7 tests) -- the stratified floor survives a single
+planted rare-label day even when the random fill alone wouldn't have found it; the result is
+deterministic for a fixed seed and has no duplicates; payload building filters bars to the
+correct window and covers all 5 validated sessions; the rendered HTML has no leftover template
+placeholders and embeds the right day count; and `score()`'s agreement-rate math and 80%-bar
+flag, including that unanswered/missing-label rows are correctly excluded rather than counted
+as disagreements. `pytest -q`: **131 passed** (124 existing + 7 new).
+
 ## Next up
 
-Phase 5.5 is done. Next is **5.6, label validation with Akash**: replay 30 random days showing
-the computed `character`/`day_type` labels, Akash marks agree/disagree per label, and any label
-scoring below 80% agreement gets its thresholds adjusted with him and re-validated -- this one
-needs his direct participation, not something to do solo.
+The `label-validate` tool is built and ready; next actual step is walking through
+`research/label_validation/sample_42.html` with Akash, tabulating his agree/disagree calls with
+`label-validate score`, and -- for anything under 80% -- adjusting that session's character
+thresholds with him and re-validating before 5.6 can be checked off.
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
-sessions + session character (in progress -- 5.1/5.2/5.3/5.4/5.5 done, 5.6 next), 6 Replay
-trainer v2, 7 ICT features & models, 8 Verification/robustness/prop simulation, 9 Daily
-automation, 10 Research loop (ongoing).
+sessions + session character (in progress -- 5.1-5.5 done, 5.6's tool built, awaiting Akash's
+review), 6 Replay trainer v2, 7 ICT features & models, 8 Verification/robustness/prop
+simulation, 9 Daily automation, 10 Research loop (ongoing).

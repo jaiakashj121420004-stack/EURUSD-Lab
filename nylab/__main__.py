@@ -6,6 +6,7 @@ stubs for now -- wired up in the phases named in docs/ROADMAP.md.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from datetime import datetime
@@ -18,6 +19,7 @@ from nylab import config as cfg
 from nylab import days as days_mod
 from nylab import sessions as sessions_mod
 from nylab import hyp_engine, hyp_loader
+from nylab import label_validate
 from nylab import ledger as ledger_mod
 from nylab import stats as stats_mod
 from nylab.data import loader, quality, timezones
@@ -201,6 +203,44 @@ notes: ""
           f"(RESEARCH_PROTOCOL.md S3).")
 
 
+def cmd_label_validate_build(args):
+    """ROADMAP 5.6: sample days, package their bars + computed character/day_type labels into
+    a single self-contained HTML page (no server needed) for Akash to click through offline."""
+    html, payload = label_validate.build(args.cache_dir, cfg.sessions(), n=args.n, seed=args.seed)
+    os.makedirs(args.out_dir, exist_ok=True)
+    html_path = os.path.join(args.out_dir, f"sample_{args.seed}.html")
+    meta_path = os.path.join(args.out_dir, f"sample_{args.seed}_meta.json")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+    print(f"Wrote {len(payload['days'])} sampled days to {os.path.abspath(html_path)}")
+    print(f"Open it in a browser, click Agree/Disagree for every row, then \"Download my answers\".")
+    print(f"Once you have the exported label_validation_answers.json, run:")
+    print(f"  python -m nylab label-validate score <path-to-answers.json> --meta {meta_path}")
+
+
+def cmd_label_validate_score(args):
+    """ROADMAP 5.6: score Akash's exported answers.json against the sampled meta payload --
+    per-label agreement rate, flagged red if below the 80% accept bar."""
+    with open(args.meta, encoding="utf-8") as f:
+        payload = json.load(f)
+    with open(args.answers, encoding="utf-8") as f:
+        answers_doc = json.load(f)
+    result = label_validate.score(answers_doc.get("answers", {}), payload)
+    if len(result) == 0:
+        sys.exit("No answered rows found -- did you click Agree/Disagree before downloading?")
+    pd.set_option("display.width", 120)
+    print(result.to_string(index=False))
+    failing = result[~result["passes_80pct"]]
+    if len(failing):
+        print(f"\n{len(failing)} label(s) below the 80% accept bar -- adjust thresholds "
+              f"with Akash and re-validate (RESEARCH_PROTOCOL.md S-thresholds-frozen-once-validated):")
+        print(failing.to_string(index=False))
+    else:
+        print("\nEvery label cleared the 80% agreement bar.")
+
+
 def _not_yet(name, phase):
     def _f(args):
         print(f"'{name}' isn't built yet -- it's scheduled for {phase} (see docs/ROADMAP.md).")
@@ -243,6 +283,20 @@ def main():
                             help="NY hour (relative to td midnight) by which the condition must be decidable")
     p_hyp_add.add_argument("--dir", dest="directory", default="config/hypotheses")
     p_hyp_add.set_defaults(func=cmd_hypothesis_add)
+
+    p_lv = sub.add_parser("label-validate", help="ROADMAP 5.6: sample days and validate computed "
+                                                   "character/day_type labels with Akash")
+    lv_sub = p_lv.add_subparsers(dest="lv_command", required=True)
+    p_lv_build = lv_sub.add_parser("build", help="sample days, write a self-contained HTML review page")
+    p_lv_build.add_argument("--n", type=int, default=30)
+    p_lv_build.add_argument("--seed", type=int, default=42)
+    p_lv_build.add_argument("--cache-dir", dest="cache_dir", default="data/cache")
+    p_lv_build.add_argument("--out-dir", dest="out_dir", default="research/label_validation")
+    p_lv_build.set_defaults(func=cmd_label_validate_build)
+    p_lv_score = lv_sub.add_parser("score", help="score an exported answers.json against the sampled meta")
+    p_lv_score.add_argument("answers")
+    p_lv_score.add_argument("--meta", required=True)
+    p_lv_score.set_defaults(func=cmd_label_validate_score)
 
     p_cal = sub.add_parser("calendar-import", help="convert calendar_export.csv (or a fallback "
                                                      "CSV) into data/calendar.parquet (ROADMAP 4.2/4.4)")
