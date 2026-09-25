@@ -24,6 +24,7 @@ from nylab.data import loader, quality, timezones
 from nylab.models import london_sweep_reversal as lsr
 from nylab.report import charts as charts_mod
 from nylab.report import html as html_mod
+from nylab.report import sessions_section as sessions_section_mod
 from nylab.report import summary as summary_mod
 from nylab.replay import server as replay_server
 
@@ -110,10 +111,13 @@ def cmd_run(args):
     os.makedirs(out_dir, exist_ok=True)
 
     figs = charts_mod.build(df, d, trades, split_date, windows["pip"])
+    figs.update(sessions_section_mod.build_figs(df, windows["pip"]))
     meta = dict(file=os.path.basename(args.csv), first=f"{d.index[0]:%Y-%m-%d}", last=f"{d.index[-1]:%Y-%m-%d}",
                 tz=mode, bar=bar, split=f"{split_date:%Y-%m-%d}", n_days=len(d))
 
-    report_html = html_mod.build(meta, d, H, m, trades, st_all, st_is, st_oos, figs, windows["pip"], model_params)
+    extra_section = sessions_section_mod.build(df, d, session_tables, sessions_cfg, cal, H, windows["pip"], figs)
+    report_html = html_mod.build(meta, d, H, m, trades, st_all, st_is, st_oos, figs, windows["pip"], model_params,
+                                  extra_section=extra_section)
     with open(os.path.join(out_dir, "report.html"), "w", encoding="utf-8") as f:
         f.write(report_html)
     d.to_csv(os.path.join(out_dir, "days.csv"))

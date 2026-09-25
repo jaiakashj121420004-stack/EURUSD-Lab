@@ -14,7 +14,7 @@ def num(x, f="{:.2f}"):
     return "—" if x is None or (isinstance(x, float) and not np.isfinite(x)) else f.format(x)
 
 
-def build(meta, d, H, m, trades, st_all, st_is, st_oos, figs, pip, model_params) -> str:
+def build(meta, d, H, m, trades, st_all, st_is, st_oos, figs, pip, model_params, extra_section="") -> str:
     css = """body{font-family:Segoe UI,Inter,Arial,sans-serif;max-width:980px;margin:30px auto;padding:0 18px;color:#1d2433;line-height:1.55}
 h1{color:#0f1a2e;margin-bottom:4px}h2{color:#0f1a2e;border-bottom:2px solid #e8c77a;padding-bottom:4px;margin-top:34px}
 table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0}th{background:#0f1a2e;color:#fff;text-align:left;padding:6px}
@@ -125,6 +125,8 @@ td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{backgro
                  "".join(f"<tr><td>{y}</td><td>{int(r['size'])}</td><td>{r['mean']:+.3f}</td><td>{r['sum']:+.1f}</td></tr>" for y, r in yearly.iterrows()) + "</table>")
     else:
         h.append("<p>No trades were generated with the current rules.</p>")
+    if extra_section:
+        h.append(extra_section)
     h.append("<h2>Files</h2><p class='muted'><b>days.csv</b> — one row per day with every level and flag above (open it in Excel and filter). "
              "<b>trades.csv</b> — every example-model trade with entry, stop, target, exit and R. "
              "Always open 10–20 of those trades on your MT5 chart and check the rules did what you think they did.</p></body></html>")

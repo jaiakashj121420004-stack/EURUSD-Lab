@@ -408,13 +408,73 @@ COLUMN_DOCS.
 `pytest -q`: **120 passed** (113 existing/updated + 7 new), full `nylab run` re-confirmed on
 Akash's real 5-year data (~18-47s depending on machine load, still well under AT-04's 90s).
 
+## Phase 5.5 (done): report sections (SESSIONS_AND_CONTEXT.md §6)
+
+New module `nylab/report/sessions_section.py`, wired into `nylab/report/html.py`'s `build()`
+(new optional `extra_section=""` parameter, appended just before the "Files" footer -- the
+old 5-argument-plus-figs call signature is unchanged for anyone calling it without the new
+content) and `nylab/__main__.py`'s `cmd_run()` (built right after `charts_mod.build()`, using
+the `session_tables`/`sessions_cfg`/`cal`/`H` already in scope there). Renders §6's six items
+as report sections 5-10 (sections 0-4 are the existing Phase 0-4 material, unchanged):
+
+- **5 · Session overview** -- median range/mean ER/character distribution for all 11 SESSION
+  ids, plus a session x year median-range table. *Disclosed simplification:* the by-year
+  breakdown is median range only, not a full character-distribution-by-year table -- §6 doesn't
+  specify a shape for this, and slicing the rarer characters (Phase 5.3 already flagged `trend`
+  firing on ~9/1300 asia-days) further by year would mostly be empty cells.
+- **6 · Volatility heatmap** -- a new median-range-by-(NY hour x weekday) heatmap
+  (`nylab.report.sessions_section.build_figs()`, composed into `figs` alongside
+  `nylab.report.charts.build()`'s existing three charts), reusing the same whole-hour bucketing
+  convention `charts.py` already uses.
+- **7 · Cross-session transition matrices** -- renders every `nylab.cross_session`
+  character/dir default pair plus the combined-label pair and the default takes-rates, with
+  `DESCRIPTIVE_BANNER` shown once at the top of the section and per-row greying (n<25) as muted
+  table rows, matching S5.1's own "look freely, but grey out and don't treat as a finding"
+  framing.
+- **8 · News impact** -- news-conditioned and news-severity reversal rates for the NY AM
+  killzone, plus a news-day-vs-not comparison table. *Disclosed simplifications:* reuses
+  `nyam_kz`'s own `news_high_usd`/`news_high_eur`/`news_surprise_z` columns as the single
+  family-agnostic proxy for "the morning's news surprise" rather than a new bar-level scan, and
+  reuses the existing `hi_t`/`lo_t` session columns split by news-day-vs-not as the stand-in for
+  "time-to-high/low after 08:30/14:00 releases" rather than new release-anchored bar scanning.
+  Both are named explicitly in the rendered HTML text itself, not left implicit. Skipped
+  entirely (with a plain-English note) when no calendar cache is attached.
+- **9 · Silver Bullet windows** -- `nylab.cross_session.silver_bullet_stats()` as a table for
+  the 3 SB windows (FVG rate, reversal-character rate as the closest available proxy for
+  "reaches the nearest opposite liquidity", median range).
+- **10 · Relational (matrix-family) hypotheses** -- filters `H` to rows with a non-null
+  `family` (currently just H016) and shows `matrix_cells` alongside the usual hit/baseline/
+  Bonferroni/OOS columns, so a 36-cell promotion is visibly distinguished from an ordinary
+  1-cell hypothesis rather than only counted invisibly into `m`. Required a small prerequisite
+  fix in `nylab/hyp_engine.py`: the reported hypothesis rows previously dropped `family` and
+  `matrix_cells` (`del r["family"], r["min_n"]`) -- changed to keep both and drop only
+  `min_n`, so this table has something to read.
+
+Confirmed on Akash's real 5-year data: all 6 new sections render with real numbers (e.g. H016
+shows `family=cross_session_lon_nyamkz_character`, `matrix_cells=36`, `n=448`, hit 28.2%,
+baseline 32.1%, not Bonferroni-significant, matching Phase 5.4's own numbers), the news section
+renders correctly with the real calendar cache attached, and `bonferroni_alpha`/`m` are
+unaffected (still 51/0.05÷51) since this phase only renders existing ledger rows, adds no new
+hypotheses.
+
+**Tests:** new `tests/test_sessions_section.py` (4 tests) -- runs a short real pipeline
+(loader-equivalent synthetic bars -> `days.build_days` -> `sessions.build_all_sessions`/
+`attach_session_features` -> `hyp_loader.load_all()`/`hyp_engine.evaluate()`) so the section
+builder gets genuine SESSION tables and an `H` frame with a real matrix-family row, then checks:
+the heatmap figure key appears when matplotlib is available, every one of the 6 new `<h2>`
+section headers is present and H016's `matrix_cells=36` shows up in section 10, the news section
+is skipped gracefully (with its own explanatory text) when no calendar is attached, and every
+`<table>`/`<tr>` tag is properly closed. `pytest -q`: **124 passed** (120 existing + 4 new).
+
 ## Next up
 
-Continuing **Phase 5**: 5.5 (report sections, SESSIONS §6) is next, then 5.6 (label validation
-with Akash on 30 replay days -- needs his own participation).
+Phase 5.5 is done. Next is **5.6, label validation with Akash**: replay 30 random days showing
+the computed `character`/`day_type` labels, Akash marks agree/disagree per label, and any label
+scoring below 80% agreement gets its thresholds adjusted with him and re-validated -- this one
+needs his direct participation, not something to do solo.
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
-sessions + session character (in progress -- 5.1/5.2/5.3/5.4 done), 6 Replay trainer v2, 7 ICT
-features & models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research
-loop (ongoing).
+sessions + session character (in progress -- 5.1/5.2/5.3/5.4/5.5 done, 5.6 next), 6 Replay
+trainer v2, 7 ICT features & models, 8 Verification/robustness/prop simulation, 9 Daily
+automation, 10 Research loop (ongoing).

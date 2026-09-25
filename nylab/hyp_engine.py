@@ -103,7 +103,10 @@ def evaluate(d: pd.DataFrame, hyps: list, split_date, run_id: str,
             r["verdict"] = "weak"
         else:
             r["verdict"] = "noise"
-        del r["family"], r["min_n"]  # not part of the reported row shape
+        r["matrix_cells"] = cells_by_id[(r["id"], r["version"])]  # ROADMAP 5.5: surfaced in
+        # the report's relational-hypotheses table so a matrix-family promotion is visibly
+        # distinguished from an ordinary 1-cell hypothesis, not just counted invisibly into m.
+        del r["min_n"]  # not part of the reported row shape (family/matrix_cells now ARE)
 
     rows = pd.DataFrame(raw)
     ts = pd.Timestamp.now(tz="UTC").isoformat()

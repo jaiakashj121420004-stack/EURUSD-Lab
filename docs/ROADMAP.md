@@ -127,7 +127,7 @@ Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.
       not just label inputs).
 - [x] 5.3 Transition matrices (descriptive), news-conditioned matrices, Silver Bullet window stats.
 - [x] 5.4 Relational hypotheses with matrix-family counting (SESSIONS §5.2).
-- [ ] 5.5 Report sections SESSIONS §6.
+- [x] 5.5 Report sections SESSIONS §6.
 - [ ] 5.6 **Label validation with the user:** replay 30 random days showing the computed labels; user marks
       agree/disagree; if agreement < 80% for a label, adjust thresholds *with him* and re-validate.
 **Accept:** AT-02 incl. the cross-session planted edge; label validation ≥ 80% agreement.
