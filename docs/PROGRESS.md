@@ -580,20 +580,50 @@ column stays in the codebase regardless -- it's one of `nylab.cross_session`'s
 `DEFAULT_PAIRS` (`lon->nyam`, `nyam->nypm`) and feeds the report's section 7 -- so this is a
 review-page display choice, not a data-model change. Proposed to Akash, not yet applied.
 
-**Not yet done:** both open questions (the trend threshold, and the nyam_kz/nyam_sb swap) need
-Akash's decision before any code changes to `nylab/sessions.py` or `label_validate.py`'s
-`SESSIONS_TO_VALIDATE`, per RESEARCH_PROTOCOL.md's "thresholds are frozen once validated, changed
-*with him*". Once decided, a second review round is needed before 5.6 can be checked off.
+**Decided (2026-09-25) and now implemented:**
+
+1. **Trend rule v2** (`nylab/sessions.py::_label_character`): Akash chose the "separate path"
+   option over simply lowering the `er>=0.45` cutoff. Added `trend_range = (range_rel>=1.4) &
+   (close_loc<=0.20 or >=0.80)`, OR'd with the original `trend_er` path. Thresholds were set from
+   his own flagged examples, not picked blind: lowest observed `range_rel` among his 6 flagged
+   trend-shaped disagreements was 1.48 (used 1.4, a little headroom), loosest observed
+   `close_loc` was 0.17/0.94 (used 0.20/0.80, a bit tighter than the 0.25/0.75 the original path
+   uses, since "strongly extreme" was his own wording and this path has no `er` gate to balance
+   it). Verified against the real data after rebuilding the cache (`nylab run ...` -- the day
+   cache holds pre-computed labels and doesn't pick up a code change until re-run): 5 of his 6
+   flagged examples now correctly read `trend` (2024-06-14 lon, 2023-05-11 lon, 2025-12-29 asia,
+   2022-10-17 nyam_full, 2023-06-01 nyam_kz). The 6th (2026-05-14) still doesn't -- checked its
+   actual numbers and its `range_rel` is only 0.94-1.26, genuinely not an unusually wide session
+   by this measure, so it's a legitimate near-miss rather than a rule failure. Added two guard
+   cases to `tests/test_sessions.py` confirming the new path requires BOTH conditions together
+   (large range alone, or extreme close alone, must NOT trigger `trend`) so it doesn't over-fire.
+2. **Session-set swap** (`nylab/label_validate.py::SESSIONS_TO_VALIDATE`): dropped the broad
+   `nyam` (7:00-10:00... actually 7-12) session, keeping `nyam_kz` (7-10) and adding `nyam_sb`
+   (10-11, Silver Bullet) as its own row -- both already existed as full `SESSION_IDS`, so this
+   was a one-line swap, no new session-window math needed.
+
+Full test suite (131 tests) passes after both changes. Cache rebuilt from the raw CSV via
+`nylab run` (required -- the parquet cache holds pre-computed character labels from the old
+rule and silently going stale is a real trap here) and a fresh 30-day review sample regenerated:
+`research/label_validation/sample_42.html` / `sample_42_meta.json` now reflect the new
+`asia / lon / nyam_kz / nyam_sb / nypm` session set and the new trend rule. **Not yet done:**
+Akash's second review pass over this fresh sample -- needed before 5.6's checkbox flips (ticket's
+own accept criteria: >=80% agreement).
 
 ## Next up
 
-Waiting on Akash's decision on (1) how to adjust the `trend` character rule given the recurring
-er/close_loc gap above, and (2) whether to swap `nyam_full` for `nyam_sb` (Silver Bullet) in the
-review page's session set. Once decided: implement, regenerate a fresh sample, and re-run the
-30-day review (or a smaller top-up round for just the changed session(s)) before 5.6 is done.
+1. Send Akash the fresh review page and score his second pass once he returns it.
+2. Scope his third request from the same message ("observe the time in between sessions,
+   especially London to NY") -- there is currently no named session covering h=5.0 (London's
+   close) to h=7.0 (NY AM killzone's start) in `cfg.sessions()`, so this needs a joint decision
+   on shape before any code: a new named session window (e.g. `lon_ny_gap`, 5.0-7.0) added
+   alongside the existing ones, vs. a lighter-weight descriptive addition to the cross-session
+   report (`nylab/cross_session.py` / report sections 7-9) that doesn't need a new session id at
+   all. Proposed to Akash, not yet applied.
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
-sessions + session character (in progress -- 5.1-5.5 done, 5.6 in progress: first review round
-scored, two joint decisions pending), 6 Replay trainer v2, 7 ICT features & models, 8
-Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).
+sessions + session character (in progress -- 5.1-5.5 done, 5.6 in progress: trend rule v2 and
+session-set swap implemented and tested, fresh review sample generated, second review round
+pending), 6 Replay trainer v2, 7 ICT features & models, 8 Verification/robustness/prop
+simulation, 9 Daily automation, 10 Research loop (ongoing).

@@ -28,8 +28,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-SESSIONS_TO_VALIDATE = ["asia", "lon", "nyam_kz", "nyam", "nypm"]
-_PREFIX = {"asia": "asia", "lon": "lon", "nyam_kz": "nyam_kz", "nyam": "nyam_full", "nypm": "nypm"}
+# v2 (confirmed with Akash 2026-09-25): dropped the broad "nyam" (7-12) session in favor of
+# nyam_kz (7-10, the NY AM killzone) plus nyam_sb (10-11, Silver Bullet) on their own -- the
+# two overlapping NY-morning windows were confusing him more than they were adding signal.
+SESSIONS_TO_VALIDATE = ["asia", "lon", "nyam_kz", "nyam_sb", "nypm"]
+_PREFIX = {"asia": "asia", "lon": "lon", "nyam_kz": "nyam_kz", "nyam_sb": "nyam_sb", "nypm": "nypm"}
 MIN_PER_LABEL = 1
 BAR_LO, BAR_HI = -7.0, 17.0  # full trading day span (asia start .. nypm/cbdr-adjacent end)
 

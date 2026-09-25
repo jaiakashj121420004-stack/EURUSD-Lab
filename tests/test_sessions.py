@@ -118,6 +118,17 @@ def test_column_docs_registers_available_at_h_matching_S1_ends_and_covers_nyam_f
     (dict(range_rel=1.0, er=0.9, close_loc=0.5, took_prev_high=True, took_prev_low=True, both_sides=True), "range_both"),
     (dict(range_rel=1.0, er=0.1, close_loc=0.5, took_prev_high=False, took_prev_low=False, both_sides=False), "chop"),
     (dict(range_rel=1.0, er=0.35, close_loc=0.5, took_prev_high=False, took_prev_low=False, both_sides=False), "normal"),
+    # trend v2's alternate path (confirmed with Akash 2026-09-25): a session with an unusually
+    # large range and a strongly extreme close is `trend` even at moderate er (< 0.45), because
+    # a low er alone shouldn't override an obviously decisive, wide session.
+    (dict(range_rel=1.48, er=0.18, close_loc=0.94, took_prev_high=False, took_prev_low=False, both_sides=False), "trend"),
+    (dict(range_rel=2.28, er=0.34, close_loc=0.05, took_prev_high=False, took_prev_low=False, both_sides=False), "trend"),
+    # a large range with only a mildly extreme close (inside the 0.20/0.80 band) must NOT
+    # qualify via the alternate path -- range alone isn't enough, the close must be decisive too.
+    (dict(range_rel=2.0, er=0.3, close_loc=0.5, took_prev_high=False, took_prev_low=False, both_sides=False), "normal"),
+    # a strongly extreme close with only a normal-sized range must NOT qualify either -- both
+    # conditions of the alternate path are required together.
+    (dict(range_rel=1.0, er=0.3, close_loc=0.95, took_prev_high=False, took_prev_low=False, both_sides=False), "normal"),
 ])
 def test_label_character_ordered_rules(row, expected):
     s = pd.DataFrame([row])

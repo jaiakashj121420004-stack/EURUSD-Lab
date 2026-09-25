@@ -209,12 +209,23 @@ def _first_raid_table(df: pd.DataFrame, lo: float, hi: float, levels: dict, pip:
 
 
 def _label_character(s: pd.DataFrame) -> pd.Series:
-    """SESSIONS_AND_CONTEXT S3's ordered rule table, first match wins."""
+    """SESSIONS_AND_CONTEXT S3's ordered rule table, first match wins.
+
+    `trend` has two independent paths (v2, confirmed with Akash 2026-09-25 after his first
+    30-day label-validation round surfaced 7+ disagreements of the same shape): the original
+    efficiency-ratio path, OR an "unusually large range + strongly extreme close" path that
+    catches decisive, wide sessions that closed at an extreme even when price chopped enough
+    inside the session to keep er below 0.45. Thresholds (range_rel>=1.4, close_loc<=0.20/
+    >=0.80) were set from his own flagged examples (lowest observed range_rel=1.48,
+    loosest observed close_loc=0.17/0.94) with a little headroom -- not just AI-picked.
+    """
     took_high = s["took_prev_high"].fillna(False)
     took_low = s["took_prev_low"].fillna(False)
     quiet = s["range_rel"] < 0.6
     reversal = (took_high & (s["close_loc"] <= 0.35)) | (took_low & (s["close_loc"] >= 0.65))
-    trend = (s["er"] >= 0.45) & ((s["close_loc"] >= 0.75) | (s["close_loc"] <= 0.25))
+    trend_er = (s["er"] >= 0.45) & ((s["close_loc"] >= 0.75) | (s["close_loc"] <= 0.25))
+    trend_range = (s["range_rel"] >= 1.4) & ((s["close_loc"] >= 0.80) | (s["close_loc"] <= 0.20))
+    trend = trend_er | trend_range
     range_both = s["both_sides"].fillna(False) & (s["close_loc"] > 0.35) & (s["close_loc"] < 0.65)
     chop = s["er"] < 0.25
 
