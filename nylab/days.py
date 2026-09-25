@@ -161,4 +161,11 @@ def attach_calendar_features(d: pd.DataFrame, calendar: pd.DataFrame, sessions_c
     Purely additive -- every column it adds is already registered in COLUMN_DOCS above, so a
     hypothesis referencing one is look-ahead-checked exactly like any other DAY column."""
     flags = calendar_features.build_day_flags(calendar, d.index, sessions_cfg)
-    return d.join(flags)
+    # SESSIONS_AND_CONTEXT.md S5.2's own example hypothesis writes `day.has_fomc` -- the
+    # dotted DSL rewrite (nylab.hyp_dsl) turns that into `day_has_fomc`, but these particular
+    # flags were joined onto `d` bare (has_fomc, not day_has_fomc) back in Phase 4, before any
+    # dotted "day.x" convention existed. Add `day_`-prefixed ALIASES (same Series, not copies)
+    # for exactly the day-level scheduling/news flags so `day.has_fomc` resolves, without
+    # renaming or removing the original bare names anything Phase 4 already depends on.
+    aliased = flags.rename(columns={c: f"day_{c}" for c in flags.columns})
+    return d.join(flags).join(aliased)

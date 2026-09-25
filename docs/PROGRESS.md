@@ -249,13 +249,75 @@ Same three as after Phase 1 (Maven program confirmation, broker tz convention, C
   they fire on ANY release matching that family's name regex, on the theory that "is a rate decision
   happening today" is binary regardless of how MetaQuotes ranked its importance that particular time.
 
+### Phase 5 (in progress) — All sessions, session character (tickets 5.1/5.2 done; 5.3-5.6 not started)
+
+**What's built:** `nylab/sessions.py` -- the SESSION table (SESSIONS_AND_CONTEXT.md §2) for all
+11 session windows except `cbdr`, plus §3's character labels (with continuous scores -- range_rel/
+er/close_loc are real columns, not just intermediate label inputs) and day types
+(trend_day/reversal_day/range_day/inside_day/outside_day/normal_day). Wired into `nylab run`
+right after the calendar attach step: `d` grows from 114 to 421 columns, and the run's existing
+hypothesis/report result is unchanged (confirmed on Akash's real 5-year data -- purely additive,
+same as Phase 4's calendar attach). `python -m nylab run` still finishes in ~30s (AT-04 budget: 90s).
+
+**Scope cuts, disclosed (not silent):**
+- `cbdr` excluded from the SESSION table entirely. Its high/low/range already exist correctly as
+  DAY columns (computed from absolute timestamps because it spans the td boundary --
+  `window()`'s h-relative logic can't handle that), and it isn't one of §5.1's default
+  transition-matrix pairs either.
+- `raids`/`first_raid`: raids against the immediately-preceding chain session's high/low plus
+  pdh/pdl/pwh/pwl (6 candidate levels) -- NOT `o_mid`, which FEATURES_SPEC §3 itself calls "a
+  reference, not liquidity". Stored as a count (`raids_count`) plus the earliest one's identity/
+  type/time, not the full structured list §2 sketches.
+- Day type's 5th label, `normal_day`, is this module's own catch-all -- §2 names
+  trend_day/reversal_day/range_day/inside_day/outside_day but nothing for "none of those", and
+  every trading day needs a label.
+
+**A real naming collision, found by running against Akash's actual data, not spotted on paper
+first:** v0's existing `nyam_*` day columns (nyam_open/high/low/close/hi_t/lo_t, available_at_h=10)
+are actually the 07:00-10:00 NY AM KILLZONE window -- what SESSIONS_AND_CONTEXT §1 now calls
+`nyam_kz`. The NEW `nyam` id in that same table is the BROADER 07:00-12:00 NY AM session, a
+genuinely different window with no legacy equivalent. Emitting its raw price columns under the
+natural prefix `nyam_` would have silently shadowed the existing (differently-windowed) legacy
+columns -- a real look-ahead-adjacent correctness bug, not a cosmetic one, since a hypothesis
+writer typing `nyam.high` expecting the 12:00 close would silently get the 10:00 one instead.
+Fixed two ways: (1) the wide day-table join renames the full `nyam` session's columns to
+`nyam_full_*` (`nyam_full.character`, never `nyam.character` -- writing `nyam.character` now
+fails LOUDLY with "unknown column", since no such column exists under that name, rather than
+silently resolving to the wrong window); (2) `attach_session_features()` also detects ANY other
+such collision generically at join time (not just the ones spotted by inspection) and keeps the
+pre-existing column's meaning, logging what it skipped. One more turned up this way: legacy
+`lon_dir` (plain `sign(close-open)`, no dead-band) collides with this module's new `dir` (same
+idea, SESSIONS_AND_CONTEXT §2's dead-banded version) -- `lon.dir` in a hypothesis therefore
+resolves to the legacy, non-dead-banded value; every other session id's `dir` is the new one.
+Also fixed along the way: SESSIONS_AND_CONTEXT §5.2's own example hypothesis writes
+`day.has_fomc`, but Phase 4's calendar flags were joined onto `d` bare (`has_fomc`, not
+`day_has_fomc`) before any dotted "day.x" convention existed -- `nylab/days.py::
+attach_calendar_features` now also joins `day_`-prefixed ALIASES for those six flags (same
+Series, original bare names untouched) so the dotted syntax resolves.
+
+**Tests:** `tests/test_sessions.py` (16 tests) -- SESSION-table shape/columns, coverage of every
+non-cbdr id, both collision fixes (asserted directly against the real legacy values, not just
+"doesn't crash"), day-type coverage, `column_docs()`'s `available_at_h` values against §1's own
+"Ends" column (including proving `nyam.character` is correctly ABSENT so it fails loudly),
+character-label rule ordering (parametrized over all 6 first-match-wins cases plus the NaN-
+propagation case), the sweep/break/no-raid classifier on hand-built bar arrays, and the
+efficiency-ratio formula on a straight line vs. a chopping series. `pytest -q`: **103 passed**
+(87 Phase 0-4 + 16 new). Also re-ran the full 5-year real-data pipeline end-to-end
+(`python -m nylab run ... --tz auto`) after every change -- same hypothesis/report result
+throughout, confirming Phase 5.1/5.2 didn't disturb anything upstream.
+
+**Not started yet:** 5.3 (transition matrices, news-conditioned matrices, Silver Bullet window
+stats), 5.4 (relational hypotheses + matrix-family multiple-testing counting), 5.5 (report
+sections), 5.6 (label validation with Akash on 30 replay days -- needs his own participation,
+can't be done without him). Continuing there next.
+
 ## Next up
 
-Moving to **Phase 5 — all sessions, session character, cross-session analysis** (SESSIONS_AND_CONTEXT.md
-full session table + the relational/cross-session layer). This is a pure-Python phase -- no
-Windows/MT5 steps expected until we're back to something export- or replay-related.
+Continuing **Phase 5**: tickets 5.3 (descriptive transition matrices) through 5.6 (label
+validation with Akash). 5.1/5.2 (the SESSION table itself + character labels) are done, tested,
+and confirmed non-disruptive on real data -- see the section above.
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
-sessions + session character (next), 6 Replay trainer v2, 7 ICT features & models, 8 Verification/
-robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).
+sessions + session character (in progress -- 5.1/5.2 done), 6 Replay trainer v2, 7 ICT features &
+models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).

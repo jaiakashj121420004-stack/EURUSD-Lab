@@ -16,6 +16,7 @@ from nylab import cache as cache_mod
 from nylab import calendar_io
 from nylab import config as cfg
 from nylab import days as days_mod
+from nylab import sessions as sessions_mod
 from nylab import hyp_engine, hyp_loader
 from nylab import ledger as ledger_mod
 from nylab import stats as stats_mod
@@ -60,6 +61,7 @@ def cmd_run(args):
     if len(d) < 60:
         sys.exit(f"Only {len(d)} complete trading days -- need at least ~60 (ideally 250+).")
 
+    cal = None
     if os.path.exists(args.calendar):
         cal = calendar_io.load_cache(args.calendar)
         d = days_mod.attach_calendar_features(d, cal, cfg.sessions())
@@ -68,6 +70,27 @@ def cmd_run(args):
     else:
         print(f"  no calendar cache at {args.calendar} -- skipping news features "
               f"(run `nylab calendar-import` first if you want them; see ROADMAP Phase 4).")
+
+    # ROADMAP Phase 5.1/5.2: the SESSION table (all sessions except cbdr) + character labels +
+    # day types, wide-joined onto `d` so hypothesis YAMLs can use dotted cross-session syntax
+    # (`lon.character`, `nyam_full.took_prev_high`, `day.has_fomc`). COLUMN_DOCS must be
+    # extended BEFORE hyp_loader.load_all() runs its look-ahead check, since a hypothesis's
+    # condition may reference a session column. days.py can't import nylab.sessions itself
+    # (sessions.py imports days.py's window()/first_cross() -- that would be a cycle), so the
+    # registration happens here instead, exactly once per run.
+    sessions_cfg = cfg.sessions()
+    days_mod.COLUMN_DOCS.update(sessions_mod.column_docs(sessions_cfg))
+    session_tables = sessions_mod.build_all_sessions(df, d, cal, sessions_cfg, windows["pip"])
+    d = sessions_mod.attach_session_features(d, session_tables)
+    skipped = d.attrs.get("sessions_skipped_columns")
+    if skipped:
+        print(f"  session-table columns kept as their pre-existing legacy meaning "
+              f"(name collision, see nylab/sessions.py): {skipped}")
+    day_types = sessions_mod.build_day_types(d)
+    d = d.join(day_types)
+    print(f"  built the SESSION table for {len(sessions_mod.SESSION_IDS)} sessions "
+          f"({d.shape[1]} day-table columns total)")
+
     split_date = d.index[int(len(d) * (1 - args.oos))]
     print(f"  {len(d)} trading days  |  out-of-sample from {split_date:%Y-%m-%d}")
 

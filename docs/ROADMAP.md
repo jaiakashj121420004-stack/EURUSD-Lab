@@ -121,8 +121,10 @@ result). Phase 4 done.
 
 ## Phase 5 — All sessions, session character, cross-session analysis (3–4 days)
 Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.
-- [ ] 5.1 SESSION table (every column in §2) for all sessions; day types.
-- [ ] 5.2 Character labels + continuous scores.
+- [x] 5.1 SESSION table (every column in §2) for all sessions except cbdr (scope cut, see
+      PROGRESS.md); day types.
+- [x] 5.2 Character labels + continuous scores (range_rel/er/close_loc are their own columns,
+      not just label inputs).
 - [ ] 5.3 Transition matrices (descriptive), news-conditioned matrices, Silver Bullet window stats.
 - [ ] 5.4 Relational hypotheses with matrix-family counting (SESSIONS §5.2).
 - [ ] 5.5 Report sections SESSIONS §6.

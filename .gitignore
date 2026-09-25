@@ -23,3 +23,6 @@ ny_lab_report/
 # Real broker exports (Akash's own MT5 data -- never source, and too big to commit)
 /EURUSD_*.csv
 /calendar_export.csv
+
+# Compiled MQL5 (Akash's MetaEditor build output, regenerated from the .mq5 source)
+mql5/*.ex5

@@ -127,9 +127,14 @@ def build_day_flags(cal: pd.DataFrame, trading_days: pd.DatetimeIndex, sessions_
 
 def column_docs() -> dict[str, float]:
     """available_at_h for every column build_day_flags() can produce -- merged into
-    nylab.days.COLUMN_DOCS so the Phase 3 look-ahead check covers calendar columns too."""
-    docs = {"has_nfp": -7.0, "has_cpi": -7.0, "has_fomc": -7.0, "has_ecb": -7.0,
+    nylab.days.COLUMN_DOCS so the Phase 3 look-ahead check covers calendar columns too. Also
+    registers the `day_`-prefixed ALIASES nylab.days.attach_calendar_features adds for the
+    scheduling/news flags (SESSIONS_AND_CONTEXT S5.2's `day.has_fomc` dotted-DSL example) --
+    same availability as the bare name, since it's the exact same underlying column."""
+    base = {"has_nfp": -7.0, "has_cpi": -7.0, "has_fomc": -7.0, "has_ecb": -7.0,
             "red_usd_0830": -7.0, "red_eur_london": -7.0}
+    docs = dict(base)
+    docs.update({f"day_{k}": v for k, v in base.items()})
     for prefix, (_session, avail) in SESSION_PREFIXES.items():
         for ccy in ("usd", "eur"):
             docs[f"{prefix}_{ccy}_cnt"] = avail
