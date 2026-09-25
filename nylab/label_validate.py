@@ -97,9 +97,12 @@ body{font-family:Segoe UI,Arial,sans-serif;background:#0f1a2e;color:#e8ecf5;marg
 header{background:#0b1220;padding:14px 20px;border-bottom:2px solid #e8c77a;position:sticky;top:0;z-index:5}
 h1{font-size:18px;margin:0}
 .muted{color:#9aa6bd;font-size:13px}
-.day{margin:18px auto;max-width:1000px;background:#16213a;border-radius:10px;padding:14px 18px;border:1px solid #263457}
+.day{margin:18px auto;max-width:1060px;background:#16213a;border-radius:10px;padding:14px 18px;border:1px solid #263457}
 .day h2{margin:0 0 6px;font-size:15px;color:#e8c77a}
-canvas{width:100%;height:220px;background:#0b1220;border-radius:6px;display:block}
+canvas{width:100%;background:#0b1220;border-radius:6px;display:block}
+.zoombar{margin:8px 0 4px;display:flex;flex-wrap:wrap;gap:6px}
+.zoombtn{border:1px solid #3b4a70;background:#1c2a48;color:#e8ecf5;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}
+.zoombtn.active{background:#2f73d6;border-color:#2f73d6}
 table{border-collapse:collapse;width:100%;margin-top:10px;font-size:13px}
 th,td{padding:5px 8px;text-align:left;border-bottom:1px solid #263457}
 th{color:#9aa6bd}
@@ -110,22 +113,108 @@ button.ans.sel-disagree{background:#c8354b;border-color:#c8354b}
 #bar button{background:#2f73d6;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:14px;cursor:pointer}
 #progress{margin-bottom:6px;font-size:13px;color:#9aa6bd}
 input.note{width:96%;background:#0b1220;border:1px solid #263457;color:#e8ecf5;border-radius:4px;padding:4px 6px;font-size:12px;margin-top:4px}
+details{max-width:1060px;margin:14px auto;background:#16213a;border:1px solid #263457;border-radius:10px;padding:10px 18px}
+summary{cursor:pointer;color:#e8c77a;font-size:14px;font-weight:600}
+details table{margin-top:10px}
+.lbl{text-decoration:underline dotted #9aa6bd;cursor:help}
 </style></head><body>
 <header><h1>Session-character &amp; day-type label validation</h1>
-<div class="muted">ROADMAP 5.6 -- for each label below: does it look right on the chart? Click Agree or Disagree
-for every row, then use "Download my answers" at the bottom and send that file back. %%COUNT%% days.</div></header>
+<div class="muted">ROADMAP 5.6 -- for each label below: does it look right on the chart? Use the zoom buttons to
+look closely at one session at a time, click Agree or Disagree for every row, then use "Download my answers"
+at the bottom and send that file back. %%COUNT%% days. Hover any bold label for a plain-English definition,
+or open "What do these labels mean?" below for the full list.</div></header>
+
+<details>
+<summary>What do these labels mean? (click to expand)</summary>
+<p class="muted">These are the SAME rules for every session (asia/london/etc.) -- "character" describes how that
+one session's price action behaved. Priority when a session could match more than one rule: quiet beats
+reversal beats trend beats range_both beats chop beats normal (the catch-all).</p>
+<table>
+<tr><th>Label</th><th>Meaning</th></tr>
+<tr><td><b>quiet</b></td><td>This session's range was well below its usual size (under 60% of its trailing
+20-day median range) -- a noticeably slow, low-volatility session.</td></tr>
+<tr><td><b>reversal</b></td><td>Price swept beyond the PREVIOUS session's high (or low), then closed back
+on the other side by the end of this session -- a stop-run / fakeout shape.</td></tr>
+<tr><td><b>trend</b></td><td>Price moved fairly directly in one direction and closed near this session's own
+extreme (top or bottom quarter of its range) -- little back-and-forth, real net progress.</td></tr>
+<tr><td><b>range_both</b></td><td>Price took out BOTH the previous session's high and low, but closed
+back near the middle -- swept liquidity on both sides and went nowhere net.</td></tr>
+<tr><td><b>chop</b></td><td>Lots of back-and-forth price movement with very little net progress
+(inefficient -- the close ended up close to where it started, even though price moved a lot).</td></tr>
+<tr><td><b>normal</b></td><td>None of the above -- an ordinary session, no strong bias either way.</td></tr>
+</table>
+<p class="muted" style="margin-top:14px">day_type applies the same idea to the WHOLE trading day, using
+YESTERDAY's high/low as the reference level instead of the previous session's. Priority: inside_day beats
+outside_day beats reversal_day beats trend_day beats range_day beats normal_day.</p>
+<table>
+<tr><th>Label</th><th>Meaning</th></tr>
+<tr><td><b>inside_day</b></td><td>Today's entire range stayed INSIDE yesterday's high-low range --
+a contraction / consolidation day.</td></tr>
+<tr><td><b>outside_day</b></td><td>Today's high went ABOVE yesterday's high AND today's low went BELOW
+yesterday's low -- today's range fully engulfed yesterday's.</td></tr>
+<tr><td><b>reversal_day</b></td><td>Today swept yesterday's high (or low), then closed back on the
+other side -- same stop-run shape as the session-level "reversal", for the whole day.</td></tr>
+<tr><td><b>trend_day</b></td><td>Today closed near its own extreme (top or bottom quarter of the day's
+range) -- a directional day.</td></tr>
+<tr><td><b>range_day</b></td><td>Today took out BOTH yesterday's high and low, but closed back near
+the middle.</td></tr>
+<tr><td><b>normal_day</b></td><td>None of the above -- an ordinary day.</td></tr>
+</table>
+</details>
+
 <div id="days"></div>
 <div id="bar"><div id="progress">0 / 0 answered</div><button onclick="downloadAnswers()">Download my answers</button></div>
 <script>
 const DATA = %%DATA%%;
 const answers = {};
+const LABEL_DESC = {
+  quiet: "Range well below this session's usual size (<60% of its 20-day trailing median).",
+  reversal: "Swept the previous session's high or low, then closed back on the other side.",
+  trend: "Moved fairly directly one way and closed near its own extreme (top/bottom quarter).",
+  range_both: "Took out BOTH the previous session's high and low, but closed back near the middle.",
+  chop: "Lots of back-and-forth, very little net progress.",
+  normal: "None of the above -- an ordinary session.",
+  inside_day: "Today's whole range stayed inside yesterday's high-low range.",
+  outside_day: "Today's high beat yesterday's high AND today's low beat yesterday's low.",
+  reversal_day: "Swept yesterday's high or low, then closed back on the other side.",
+  trend_day: "Closed near today's own extreme (top or bottom quarter of the day's range).",
+  range_day: "Took out BOTH yesterday's high and low, but closed back near the middle.",
+  normal_day: "None of the above -- an ordinary day.",
+};
+const zoomState = {};
+
+function hourLabel(h){
+  const c = ((h % 24) + 24) % 24;
+  const hh = Math.floor(c);
+  return String(hh).padStart(2, "0") + ":00";
+}
 
 function drawDay(day, idx){
   const wrap = document.createElement("div"); wrap.className = "day";
-  const h2 = document.createElement("h2"); h2.textContent = day.td + "  ·  day_type: " + (day.day_type || "—");
+  const h2 = document.createElement("h2"); h2.textContent = day.td + "  ·  day_type: ";
+  const dtLabel = document.createElement("span"); dtLabel.className = "lbl";
+  dtLabel.textContent = day.day_type || "—";
+  dtLabel.title = LABEL_DESC[day.day_type] || "";
+  h2.appendChild(dtLabel);
   wrap.appendChild(h2);
-  const canvas = document.createElement("canvas"); canvas.width = 1000; canvas.height = 220;
+
+  const zbar = document.createElement("div"); zbar.className = "zoombar";
+  const zoomOptions = [{key: "full", label: "Full day"}].concat(
+    day.sessions.map(s => ({key: s.id, label: s.id + ": " + (s.label || "?")})));
+  zoomOptions.forEach(opt => {
+    const b = document.createElement("button");
+    b.className = "zoombtn" + (opt.key === "full" ? " active" : "");
+    b.id = "zoom_" + idx + "_" + opt.key;
+    b.textContent = opt.label;
+    b.onclick = () => setZoom(idx, opt.key);
+    zbar.appendChild(b);
+  });
+  wrap.appendChild(zbar);
+
+  const canvas = document.createElement("canvas"); canvas.id = "cv_" + idx;
+  canvas.width = 1000; canvas.height = 340;
   wrap.appendChild(canvas);
+
   const tbl = document.createElement("table");
   tbl.innerHTML = "<tr><th>Label</th><th>Computed value</th><th>Your call</th><th>Note (optional)</th></tr>";
   const rows = day.sessions.map(s => ["session:" + s.id, s.label]);
@@ -133,7 +222,9 @@ function drawDay(day, idx){
   rows.forEach(([key, val]) => {
     const tr = document.createElement("tr");
     const ansKey = day.td + "|" + key;
-    tr.innerHTML = "<td>" + key + "</td><td><b>" + (val || "—") + "</b></td>" +
+    const desc = LABEL_DESC[val] || "";
+    tr.innerHTML = "<td>" + key + "</td><td><b class='lbl' title=\"" + desc.replace(/"/g, "&quot;") + "\">" +
+      (val || "—") + "</b></td>" +
       "<td><button class='ans' id='a_" + ansKey + "' onclick=\"setAns('" + ansKey + "','agree')\">Agree</button>" +
       "<button class='ans' id='d_" + ansKey + "' onclick=\"setAns('" + ansKey + "','disagree')\">Disagree</button></td>" +
       "<td><input class='note' placeholder='optional note' oninput=\"setNote('" + ansKey + "', this.value)\"></td>";
@@ -141,35 +232,81 @@ function drawDay(day, idx){
   });
   wrap.appendChild(tbl);
   document.getElementById("days").appendChild(wrap);
-  requestAnimationFrame(() => render(canvas, day));
+  zoomState[idx] = "full";
+  requestAnimationFrame(() => render(idx));
 }
 
-function render(canvas, day){
-  const ctx = canvas.getContext("2d");
-  const bars = day.bars;
-  if (!bars.length) { ctx.fillStyle="#9aa6bd"; ctx.fillText("no bars", 10, 20); return; }
-  const W = canvas.width, H = canvas.height, pad = 30;
-  const hs = bars.map(b => b[0]);
-  const hi = Math.max(...bars.map(b => b[2])), lo = Math.min(...bars.map(b => b[3]));
-  const hMin = Math.min(...hs), hMax = Math.max(...hs);
-  const xOf = h => pad + (h - hMin) / (hMax - hMin || 1) * (W - 2*pad);
-  const yOf = p => H - pad - (p - lo) / (hi - lo || 1e-6) * (H - 2*pad);
-  // session shading + labels
-  day.sessions.forEach(s => {
-    const x0 = xOf(Math.max(s.lo, hMin)), x1 = xOf(Math.min(s.hi, hMax));
-    ctx.fillStyle = "rgba(232,199,122,0.06)"; ctx.fillRect(x0, pad, x1 - x0, H - 2*pad);
-    ctx.strokeStyle = "rgba(232,199,122,0.35)"; ctx.beginPath(); ctx.moveTo(x0, pad); ctx.lineTo(x0, H-pad); ctx.stroke();
-    ctx.fillStyle = "#e8c77a"; ctx.font = "10px sans-serif";
-    ctx.fillText(s.id + ": " + (s.label||"?"), x0 + 3, pad + 12);
+function setZoom(idx, key){
+  zoomState[idx] = key;
+  const day = DATA.days[idx];
+  ["full"].concat(day.sessions.map(s => s.id)).forEach(k => {
+    document.getElementById("zoom_" + idx + "_" + k).classList.toggle("active", k === key);
   });
+  render(idx);
+}
+
+function render(idx){
+  const day = DATA.days[idx];
+  const canvas = document.getElementById("cv_" + idx);
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const key = zoomState[idx] || "full";
+  let winLo, winHi;
+  if (key === "full") {
+    winLo = Math.min(...day.bars.map(b => b[0]));
+    winHi = Math.max(...day.bars.map(b => b[0]));
+  } else {
+    const s = day.sessions.find(s => s.id === key);
+    const pad = (s.hi - s.lo) * 0.15 || 0.25;
+    winLo = s.lo - pad; winHi = s.hi + pad;
+  }
+  const bars = day.bars.filter(b => b[0] >= winLo && b[0] <= winHi);
+  if (!bars.length) { ctx.fillStyle = "#9aa6bd"; ctx.fillText("no bars in this window", 10, 20); return; }
+
+  const W = canvas.width, H = canvas.height, padL = 55, padR = 12, padT = 30, padB = 26;
+  const hi = Math.max(...bars.map(b => b[2])), lo = Math.min(...bars.map(b => b[3]));
+  const span = (hi - lo) || 1e-6;
+  const xOf = h => padL + (h - winLo) / (winHi - winLo || 1) * (W - padL - padR);
+  const yOf = p => H - padB - (p - lo) / span * (H - padT - padB);
+
+  // price gridlines (5 ticks)
+  ctx.font = "11px sans-serif"; ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i++) {
+    const p = lo + span * i / 4;
+    const y = yOf(p);
+    ctx.strokeStyle = "rgba(154,166,189,0.15)"; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillStyle = "#9aa6bd"; ctx.fillText(p.toFixed(5), padL - 6, y + 3);
+  }
+  // hour gridlines: every hour if zoomed (span<=6h), else every 2h
+  const hourStep = (winHi - winLo) <= 7 ? 1 : 2;
+  ctx.textAlign = "center";
+  for (let h = Math.ceil(winLo / hourStep) * hourStep; h <= winHi; h += hourStep) {
+    const x = xOf(h);
+    ctx.strokeStyle = "rgba(154,166,189,0.12)"; ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H - padB); ctx.stroke();
+    ctx.fillStyle = "#9aa6bd"; ctx.fillText(hourLabel(h), x, H - 8);
+  }
+  // range annotation (pips, assuming EURUSD pip = 0.0001)
+  ctx.textAlign = "left"; ctx.fillStyle = "#9aa6bd";
+  ctx.fillText("range shown: " + ((hi - lo) / 0.0001).toFixed(1) + " pips", padL, 14);
+
+  // session shading + labels (only the ones overlapping this window)
+  day.sessions.forEach(s => {
+    if (s.hi < winLo || s.lo > winHi) return;
+    const x0 = xOf(Math.max(s.lo, winLo)), x1 = xOf(Math.min(s.hi, winHi));
+    ctx.fillStyle = "rgba(232,199,122,0.06)"; ctx.fillRect(x0, padT, x1 - x0, H - padT - padB);
+    ctx.strokeStyle = "rgba(232,199,122,0.35)"; ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, H - padB); ctx.stroke();
+    ctx.fillStyle = "#e8c77a"; ctx.textAlign = "left"; ctx.font = "11px sans-serif";
+    ctx.fillText(s.id + ": " + (s.label || "?"), x0 + 3, padT + 13);
+  });
+
   // candles
-  const bw = Math.max(1, (W - 2*pad) / bars.length * 0.7);
-  bars.forEach(([h,o,hh,l,c]) => {
+  const bw = Math.max(2, (W - padL - padR) / bars.length * 0.7);
+  bars.forEach(([h, o, hh, l, c]) => {
     const x = xOf(h);
     ctx.strokeStyle = c >= o ? "#119469" : "#c8354b";
     ctx.beginPath(); ctx.moveTo(x, yOf(hh)); ctx.lineTo(x, yOf(l)); ctx.stroke();
     ctx.fillStyle = c >= o ? "#119469" : "#c8354b";
-    ctx.fillRect(x - bw/2, yOf(Math.max(o,c)), bw, Math.max(1, Math.abs(yOf(o)-yOf(c))));
+    ctx.fillRect(x - bw / 2, yOf(Math.max(o, c)), bw, Math.max(1, Math.abs(yOf(o) - yOf(c))));
   });
 }
 
@@ -182,7 +319,7 @@ function setAns(key, val){
 }
 function setNote(key, val){ answers[key] = Object.assign(answers[key] || {}, {note: val}); }
 function updateProgress(){
-  const total = DATA.days.reduce((n,d) => n + d.sessions.length + 1, 0);
+  const total = DATA.days.reduce((n, d) => n + d.sessions.length + 1, 0);
   const answered = Object.values(answers).filter(a => a.call).length;
   document.getElementById("progress").textContent = answered + " / " + total + " answered";
 }
