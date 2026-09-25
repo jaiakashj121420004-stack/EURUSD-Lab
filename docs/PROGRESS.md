@@ -306,18 +306,67 @@ efficiency-ratio formula on a straight line vs. a chopping series. `pytest -q`: 
 (`python -m nylab run ... --tz auto`) after every change -- same hypothesis/report result
 throughout, confirming Phase 5.1/5.2 didn't disturb anything upstream.
 
-**Not started yet:** 5.3 (transition matrices, news-conditioned matrices, Silver Bullet window
-stats), 5.4 (relational hypotheses + matrix-family multiple-testing counting), 5.5 (report
-sections), 5.6 (label validation with Akash on 30 replay days -- needs his own participation,
-can't be done without him). Continuing there next.
+**Not started yet (at that point):** 5.3 (transition matrices, news-conditioned matrices,
+Silver Bullet window stats), 5.4 (relational hypotheses + matrix-family multiple-testing
+counting), 5.5 (report sections), 5.6 (label validation with Akash on 30 replay days -- needs
+his own participation, can't be done without him).
+
+### Phase 5.3 (done) — descriptive cross-session layer
+
+**What's built:** `nylab/cross_session.py` (SESSIONS_AND_CONTEXT.md S5.1) -- generic, reusable
+machinery, not a fixed report:
+- `character_transition_matrix(a, b)` / a `dir` version: P(B's label | A's label), with count,
+  conditional %, the unconditional % of that B label (for comparison), Wilson 95% CI, and a
+  `greyed` flag when the A-row has fewer than 25 days (S5.1's own cutoff) -- generic over ANY
+  categorical pair, so it also drives `run_default_character_matrices()`/`run_default_dir_
+  matrices()` across S5.1's default pairs (asia->lon, lon->nyam, nyam->nypm, lon->nypm) plus the
+  combined (asia+lon)->nyam pair via a new `combined_label()` helper.
+- `takes_rate()` / `run_default_takes()`: "does session B's window trade beyond session A's
+  high/low", reusing `nylab.days.first_cross` (the exact same conservative rule the DAY table's
+  existing `ny_takes_lon_high`-style columns use) generalized to any A/B pair instead of the
+  handful hardcoded since Phase 1.
+- `news_conditioned_rate()` (rows: none/USD/EUR/both had high-impact news) and
+  `news_severity_rate()` (rows: no event / event, low |z| / event, high |z|) -- both take any
+  boolean outcome Series, so they cover S5.1's "red EUR news -> NY AM reversal rate" example
+  directly.
+- `continuation_rate()` ("NY AM trend -> NY PM continues vs reverses", optionally conditioned)
+  and `directional_take_rate()` ("Asia quiet + London trend -> NY AM takes London's extreme in
+  the SAME direction") -- the other two example rows S5.1 explicitly asked for.
+- `silver_bullet_stats()`: per Silver Bullet window (lon_sb/nyam_sb/nypm_sb), FVG-formation
+  rate, reversal-character rate, median range.
+- Every function/result carries `DESCRIPTIVE_BANNER` in spirit (S5.1: looking is free, nothing
+  here is significance-tested) -- rendering it into report.html is 5.5, not yet built.
+
+**A disclosed simplification:** S6 item 5 asks how often price "reaches the nearest opposite
+liquidity" inside a Silver Bullet window -- that phrase doesn't reduce to one of this module's
+existing primitives without inventing a specific liquidity-selection rule the spec doesn't state,
+so `silver_bullet_stats()` reports the session's own `reversal`-character rate as the closest
+available proxy (a reversal, by construction, means price traded through one side and closed
+back the other way) and says so in its docstring rather than silently standing in for the exact
+phrase.
+
+**An observation, not a bug, worth flagging before 5.6:** running the default character
+matrices against Akash's real 5-year data shows the `trend` label firing VERY rarely for the
+broader NY AM (`nyam`, i.e. `nyam_full`) window (2 out of ~1,300 days) and for Asia (9 days) --
+`chop` and `reversal` dominate instead. The rule (`er >= 0.45` and closing near an extreme) is
+exactly S3's stated default threshold; it just may be tuned for a narrower/shorter window than a
+5-hour session. This is precisely what ticket 5.6's replay validation with Akash is for, so no
+threshold was changed here -- flagging it now so it's not a surprise when we get to 5.6.
+
+**Tests:** `tests/test_cross_session.py` (10 tests) -- matrix counts/greying/NaN-dropping/empty-
+input, both news-bucket functions, continuation rate's flat-A exclusion and conditioning, the
+directional-take-rate's direction matching, Silver Bullet stats' shape, and `takes_rate()`
+against a real (small synthetic) bar series to exercise the actual `first_cross` machinery, not
+just a mocked one. `pytest -q`: **113 passed** (103 existing + 10 new), no regressions.
 
 ## Next up
 
-Continuing **Phase 5**: tickets 5.3 (descriptive transition matrices) through 5.6 (label
-validation with Akash). 5.1/5.2 (the SESSION table itself + character labels) are done, tested,
-and confirmed non-disruptive on real data -- see the section above.
+Continuing **Phase 5**: ticket 5.4 (relational hypotheses -- promoting a matrix cell to a
+counted hypothesis, with the matrix-family multiple-testing rule) is next, then 5.5 (report
+sections) and 5.6 (label validation with Akash -- needs him).
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
-sessions + session character (in progress -- 5.1/5.2 done), 6 Replay trainer v2, 7 ICT features &
-models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).
+sessions + session character (in progress -- 5.1/5.2/5.3 done), 6 Replay trainer v2, 7 ICT
+features & models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research
+loop (ongoing).
