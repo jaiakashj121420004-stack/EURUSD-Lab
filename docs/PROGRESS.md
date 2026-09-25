@@ -509,15 +509,91 @@ placeholders and embeds the right day count; and `score()`'s agreement-rate math
 flag, including that unanswered/missing-label rows are correctly excluded rather than counted
 as disagreements. `pytest -q`: **131 passed** (124 existing + 7 new).
 
+## Phase 5.6 (in progress): Akash's first 30-day review, scored
+
+Akash reviewed `sample_42.html` (30 days x 5 sessions + day_type = 180 calls) and returned
+`label_validation_answers.json`. `label-validate score` result:
+
+| family | label | n | agree | passes 80%? |
+|---|---|---|---|---|
+| character | chop | 64 | 78.1% | **no** |
+| character | normal | 21 | 61.9% | **no** |
+| character | quiet | 20 | 95.0% | yes |
+| character | range_both | 11 | 90.9% | yes |
+| character | reversal | 26 | 80.8% | yes |
+| character | trend | 8 | 100% | yes |
+| day_type | inside_day | 2 | 100% | yes |
+| day_type | normal_day | 8 | 62.5% | **no** |
+| day_type | outside_day | 3 | 100% | yes |
+| day_type | reversal_day | 6 | 100% | yes |
+| day_type | trend_day | 11 | 90.9% | yes |
+
+Rather than taking the raw agreement numbers at face value, every one of his 33 disagreements
+was individually checked against that session's actual `range_rel`/`er`/`close_loc`/
+`took_prev_high`/`took_prev_low`/`both_sides` values (not just the label) -- Akash asked
+specifically for this rather than the tool being "ok with" his answers uncritically. Two real
+findings came out of that, plus one naming issue that isn't a labeling bug at all:
+
+1. **A genuine, recurring threshold gap (the real reason chop/normal/normal_day are under 80%):**
+   at least 7 of the disagreements are the SAME shape -- a session closed at an extreme
+   (`close_loc` <=0.25 or >=0.75) with a clearly outsized range (`range_rel` often 1.2-2.3x
+   normal), but `er` landed in the 0.18-0.35 band, short of `trend`'s `er>=0.45` requirement --
+   so it fell through to `chop` (`er<0.25`) or the `normal` catch-all instead of `trend`, even
+   though the close location and range alone read as an obvious trend to a human. Examples,
+   with the actual numbers: 2022-10-17 nyam_full (er=0.35, close_loc=0.95, range_rel=1.50, his
+   note "trending bullish, moved 122 pips"); 2023-05-11 lon (er=0.35, close_loc=0.17,
+   range_rel=1.88, "trending bearish"); 2024-06-14 lon (er=0.34, close_loc=0.05,
+   range_rel=2.28(!), "trend day, full bearish"); 2025-12-29 asia (er=0.28, close_loc=0.02,
+   range_rel=1.70, "trend"); 2026-05-14 nyam_kz/nyam_full (er=0.22/0.24, close_loc=0.19/0.18,
+   "TRENDING" x2); 2023-06-01 nyam_kz (er=0.18, close_loc=0.94, range_rel=1.48). This is a real
+   candidate for adjusting `_label_character`'s `trend` rule (`nylab/sessions.py`), not noise --
+   flagged for a joint decision with Akash on the specific new threshold/rule shape (candidates:
+   lower the `er>=0.45` cutoff, or add an alternate `range_rel`-driven path for trend so an
+   unusually large, decisively-closed session qualifies even at moderate efficiency) before
+   changing anything and re-validating.
+2. **A vocabulary gap, not a math gap:** several "disagreements" turned out to describe exactly
+   what `reversal` already means -- e.g. 2022-04-11 lon and 2024-05-01 lon, both correctly
+   flagged `reversal` by the rule (swept both the prior extreme, closed back past 0.65/0.35),
+   where Akash's own note called it "manipulation/Judas swing/turtle soup", which IS the same
+   pattern in ICT terminology. No code change needed here -- worth adding that vocabulary as a
+   parenthetical in the glossary so it reads as agreement rather than disagreement next round.
+3. **A couple of true near-misses right at a threshold edge** (e.g. 2024-02-15 nyam_full,
+   close_loc=0.48 vs reversal's 0.35 cutoff, his note "almost a reversal at the top") -- not
+   wrong, just close enough to the boundary that a human and the rule can reasonably differ;
+   noted but not treated as evidence for a threshold change on their own.
+4. A few disagreements (2024-06-26's four sessions, 2025-01-23/2025-09-17 nyam_full/nyam_kz)
+   came back with no note, so the underlying numbers were checked but the specific reasoning is
+   unknown -- mostly consistent with their labels on the numbers alone (e.g. very low `er`
+   really does mean chop even on a big-range day), flagged to ask Akash directly rather than
+   guessed at.
+
+**Also raised by Akash, a session-taxonomy question, not a labeling one:** he found `nyam_kz`
+(07:00-10:00, the killzone) and `nyam`/`nyam_full` (07:00-12:00, the broader morning) confusing
+side by side, since they mostly describe the same price action for the first three hours, and
+suggested validating `nyam_kz` (7-10) plus the Silver Bullet window (10-11) instead. That's a
+reasonable simplification for THIS review page specifically -- `nyam_sb` (10:00-11:00) isn't
+currently in `SESSIONS_TO_VALIDATE` at all, so swapping it in for the broader `nyam` would cover
+new ground rather than duplicate what `nyam_kz` already checks, at the cost of leaving 11:00-
+12:00 unreviewed here (a defensible small gap: that hour isn't a Silver Bullet window and has no
+existing hypothesis conditioning on it either). The underlying `nyam`/`nyam_full` SESSION table
+column stays in the codebase regardless -- it's one of `nylab.cross_session`'s
+`DEFAULT_PAIRS` (`lon->nyam`, `nyam->nypm`) and feeds the report's section 7 -- so this is a
+review-page display choice, not a data-model change. Proposed to Akash, not yet applied.
+
+**Not yet done:** both open questions (the trend threshold, and the nyam_kz/nyam_sb swap) need
+Akash's decision before any code changes to `nylab/sessions.py` or `label_validate.py`'s
+`SESSIONS_TO_VALIDATE`, per RESEARCH_PROTOCOL.md's "thresholds are frozen once validated, changed
+*with him*". Once decided, a second review round is needed before 5.6 can be checked off.
+
 ## Next up
 
-The `label-validate` tool is built and ready; next actual step is walking through
-`research/label_validation/sample_42.html` with Akash, tabulating his agree/disagree calls with
-`label-validate score`, and -- for anything under 80% -- adjusting that session's character
-thresholds with him and re-validating before 5.6 can be checked off.
+Waiting on Akash's decision on (1) how to adjust the `trend` character rule given the recurring
+er/close_loc gap above, and (2) whether to swap `nyam_full` for `nyam_sb` (Silver Bullet) in the
+review page's session set. Once decided: implement, regenerate a fresh sample, and re-run the
+30-day review (or a smaller top-up round for just the changed session(s)) before 5.6 is done.
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
-sessions + session character (in progress -- 5.1-5.5 done, 5.6's tool built, awaiting Akash's
-review), 6 Replay trainer v2, 7 ICT features & models, 8 Verification/robustness/prop
-simulation, 9 Daily automation, 10 Research loop (ongoing).
+sessions + session character (in progress -- 5.1-5.5 done, 5.6 in progress: first review round
+scored, two joint decisions pending), 6 Replay trainer v2, 7 ICT features & models, 8
+Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop (ongoing).
