@@ -14,6 +14,24 @@ import pandas as pd
 
 from nylab.data import timezones
 
+# MQL5's FileOpen(..., FILE_ANSI, ...) writes calendar_export.csv in Windows' ANSI codepage,
+# not UTF-8 -- event names with a dash/accented character ("U.S. \u2013 Fed Speech", say) then
+# fail a plain utf-8 read. Try utf-8 first (handles a plain-ASCII export, and any fallback CSV a
+# user wrote themselves in a normal editor), then fall back to cp1252 (Windows' default Western
+# European ANSI codepage), then latin-1 (never raises -- last resort so import never hard-crashes
+# on an encoding it doesn't recognize).
+_CSV_ENCODINGS = ("utf-8", "cp1252", "latin-1")
+
+
+def _read_csv_any_encoding(path, **kwargs) -> pd.DataFrame:
+    last_err = None
+    for enc in _CSV_ENCODINGS:
+        try:
+            return pd.read_csv(path, encoding=enc, **kwargs)
+        except UnicodeDecodeError as e:
+            last_err = e
+    raise last_err
+
 MT5_COLUMNS = {"time_server", "currency", "event_name", "importance"}
 FALLBACK_COLUMNS = {"datetime_ny", "currency", "event", "impact"}
 
@@ -38,7 +56,7 @@ def load_mt5_export(path: str, tz_mode: str = "ny+7") -> pd.DataFrame:
     tz_mode MUST match whatever mode nylab.data.timezones used for the price bars (DATA_AND_TIME.md
     S2, SESSIONS_AND_CONTEXT.md S4) -- the calendar and the bars have to agree on what "NY time"
     means or every availability/look-ahead check downstream is silently wrong."""
-    raw = pd.read_csv(path)
+    raw = _read_csv_any_encoding(path)
     missing = MT5_COLUMNS - set(raw.columns)
     if missing:
         raise ValueError(f"{path}: missing columns {sorted(missing)} -- not an ExportCalendar.mq5 export?")
@@ -62,7 +80,7 @@ def load_fallback_csv(path: str) -> pd.DataFrame:
     """4.4 fallback: a user-supplied CSV with columns datetime_ny, currency, event, impact,
     actual, forecast, previous -- already in NY time, no tz conversion needed. Use this when
     ExportCalendar.mq5 can't be run (e.g. broker disables MQL5 calendar access)."""
-    raw = pd.read_csv(path)
+    raw = _read_csv_any_encoding(path)
     missing = FALLBACK_COLUMNS - set(raw.columns)
     if missing:
         raise ValueError(f"{path}: missing columns {sorted(missing)} -- expected the fallback schema "
@@ -83,7 +101,7 @@ def load_fallback_csv(path: str) -> pd.DataFrame:
 def load(path: str, tz_mode: str = "ny+7") -> pd.DataFrame:
     """Auto-detects ExportCalendar.mq5's schema vs the 4.4 fallback schema by column names,
     then dispatches. This is what `nylab calendar-import` calls."""
-    header = pd.read_csv(path, nrows=0).columns
+    header = _read_csv_any_encoding(path, nrows=0).columns
     cols = set(header)
     if MT5_COLUMNS <= cols:
         df = load_mt5_export(path, tz_mode)
