@@ -140,9 +140,13 @@ def _news_for_window(cal: pd.DataFrame, trading_days: pd.DatetimeIndex, lo: floa
     out = pd.DataFrame(index=trading_days)
     out["news_high_usd"] = c[c["currency"] == "USD"].groupby("td").size().reindex(trading_days, fill_value=0)
     out["news_high_eur"] = c[c["currency"] == "EUR"].groupby("td").size().reindex(trading_days, fill_value=0)
-    if len(c):
-        idx = c.assign(absz=c["surprise_z"].abs()).groupby("td")["absz"].idxmax()
-        out["news_surprise_z"] = idx.map(c["surprise_z"])
+    # Only events that HAVE a surprise_z can be the "largest |z|" (surprise_z is NaN until an
+    # event has >= 8 prior releases). Dropping NaN first gives the same result pandas 2 gave
+    # for an all-NaN day (NaN), and avoids pandas 3's hard error on an all-NA idxmax group.
+    cz = c.dropna(subset=["surprise_z"])
+    if len(cz):
+        idx = cz.assign(absz=cz["surprise_z"].abs()).groupby("td")["absz"].idxmax()
+        out["news_surprise_z"] = idx.map(cz["surprise_z"])
         out["news_surprise_z"] = out["news_surprise_z"].reindex(trading_days)
     else:
         out["news_surprise_z"] = np.nan

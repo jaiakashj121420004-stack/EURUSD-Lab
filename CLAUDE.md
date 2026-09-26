@@ -58,6 +58,10 @@ These override any convenience. If a task seems to require breaking one, stop an
 1. **Read-only on MT5.** Never call `order_send`, `order_check`, position modification or any trading
    function. The only MQL5 code allowed is the calendar-export script (read-only). No live execution.
 2. **No look-ahead.** A feature or signal at time *t* may only use bars that *closed* at or before *t*.
+   This covers **thresholds** too (a "bottom 20%" cut-off must come from earlier days only, never the
+   full 5-year sample), and a hypothesis **outcome** must be measured only from bars *after* the
+   decision time (an outcome window that overlaps the condition window is partly already known).
+   Both traps were found in H013/H014 on 2026-09-26 — RESEARCH_PROTOCOL §3.
    A session's levels/character may only be used after that session has ended. News **actual** values
    only after release time. Every new feature needs a truncation test (RESEARCH_PROTOCOL §3). The replay
    trainer must never send unrevealed bars to the browser (REPLAY_TRAINER §7).
@@ -106,6 +110,11 @@ folder mounted; the user's Windows laptop (where MT5 lives) is a different machi
 - You **cannot** run `MetaTrader5` Python code or MQL5 scripts. Write them; the user runs them on Windows
   (give exact PowerShell / MetaEditor steps) and drops the resulting CSVs into `data/`.
 - Develop and test everything else in the sandbox using the synthetic fixtures and his exported CSVs.
+- **A phase is not "done" until `run_tests.bat` passes on HIS machine** (added 2026-09-26). The sandbox's
+  library versions differ from his `.venv`: on 2026-09-26 all 135 tests passed in the sandbox (pandas 2.3)
+  while 9 failed and `nylab run` crashed on his laptop (pandas 3.0.6). Before calling a phase done, test in
+  the sandbox on BOTH the lowest and highest pandas allowed by `requirements.txt`, and ask him to run
+  `run_tests.bat` and paste the last line. Never widen a version cap in `requirements.txt` untested.
 - The **replay trainer** is launched by the user on Windows (`python -m nylab replay` in PowerShell, opens
   his normal browser). A server you start in the sandbox is not reachable from his browser, so test the
   API with pytest in the sandbox and give him the launch steps. Keep all code Windows-compatible
@@ -146,7 +155,8 @@ When the user says "run the research" / "what's new?" / "find me something":
 
 1. Ensure data is fresh (Phase 9 automates). Run the pipeline.
 2. Read `reports/latest/summary.json` (not just the HTML).
-3. Summarise in ≤ 10 lines: descriptive facts vs candidates vs noise. Include one cross-session fact
+3. Summarise in ≤ 10 lines: descriptive facts vs candidates vs noise. Always give the effect in
+   **pips or R**, not just a hit-rate — a "significant" 2-pip difference is useless to a trader. Include one cross-session fact
    (e.g. "After a *chop* London, NY AM was a *trend* session 31% of the time vs 44% after a *trend* London").
 4. Propose **at most 3** hypotheses, each grounded in a Codex concept AND a data observation. Write them to
    `research/hypotheses/`. State the ledger count and corrected threshold **before** running.

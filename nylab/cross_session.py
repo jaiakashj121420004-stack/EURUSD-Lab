@@ -37,7 +37,9 @@ def combined_label(*series: pd.Series) -> pd.Series:
     aligned = pd.concat(series, axis=1)
     out = aligned.iloc[:, 0].astype(object)
     any_na = aligned.isna().any(axis=1)
-    joined = aligned.astype(str).agg("|".join, axis=1)
+    # NaN -> "" before joining (masked back to NaN just below): pandas 3's string dtype keeps
+    # NaN as a float through astype(str), which "|".join can't take. Same output on pandas 2.
+    joined = aligned.astype(object).where(~aligned.isna(), "").astype(str).agg("|".join, axis=1)
     out = joined.where(~any_na, np.nan)
     out.name = "|".join(s.name or "x" for s in series)
     return out

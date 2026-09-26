@@ -219,6 +219,10 @@ Each of these was checked twice: once from the numbers in the report, once in th
 - **Trading value if it survives the fix:** it's a *when* filter, not a *which way* signal. Skip
   or size down on quiet-Asia days, where targets are less likely to be reached. That's useful for a
   Maven account (fewer low-range days means less chop), but it's not an entry.
+- **Update, same day, re-run on real data:** both are artifacts. H014 with a prior-60-day threshold is
+  noise (IS +2 to +5 pp, p 0.3–0.6). H013's outcome window overlaps its condition. Measured 09:30–16:00
+  only, it's noise (OOS +2 pp, p 0.67). The only real effect underneath is ordinary day-to-day
+  volatility persistence (see PROGRESS 2026-09-26 second pass). Full fix: ROADMAP 5.7.
 - **To do (needs Akash's OK, it bumps m):** add a prior-only threshold function to the DSL (e.g.
   `quantile_prior(col, q, 60)` over the previous 60 td, like `range_rel` already does). Re-issue
   H013/H014 as v1.1 with correctly-directed titles. Make the verdict record the direction relative

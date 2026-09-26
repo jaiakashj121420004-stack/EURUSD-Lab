@@ -7,7 +7,8 @@ makes the output trustworthy. Formula references point to the user's *Codex Form
 ## 1. Splits
 
 - **Chronological only.** Never shuffle days. Default: first 70% of td = IS, last 30% = OOS.
-- **Embargo:** drop 5 td between IS and OOS (regime features use rolling windows).
+- **Embargo:** drop 5 td between IS and OOS (regime features use rolling windows). *Not yet implemented
+  in `nylab/__main__.py` as of 2026-09-26 — ROADMAP 5.7.*
 - **Walk-forward (Phase 7+):** rolling windows of 12 months IS → 3 months OOS, step 3 months.
   Report each fold and the concatenated OOS equity curve. Parameters are re-chosen per fold
   *using IS only*. Walk-forward efficiency = OOS annualised R / IS annualised R.
@@ -17,6 +18,18 @@ makes the output trustworthy. Formula references point to the user's *Codex Form
 For **proportion hypotheses** (condition → outcome): N, hit rate, baseline (same outcome over all
 eligible days, computed on the same split), Wilson 95% CI, z vs baseline, two-sided p, IS hit, OOS hit,
 OOS N, lift = hit − baseline (percentage points).
+
+**Clarified 2026-09-26 (implementation must match — ROADMAP 5.7):**
+- The p-value used for Bonferroni/BH is computed on **IS days only**. OOS is then a separate,
+  independent check. (The engine currently computes p on IS+OOS combined, so OOS days are counted twice:
+  once inside the "significance" and again as "confirmation".)
+- Test the condition days against the **complement** (days where the condition was false) with a
+  two-proportion z-test, on the same split. Comparing against an all-days baseline that already
+  contains the condition days understates the difference and ignores the baseline's own noise.
+- "Wilson CI" must be the actual Wilson score interval (`nylab/stats.py::wilson_ci` currently computes
+  the simpler Wald interval under that name).
+- Always report the effect size in trader units too (median pips / R difference), and flag
+  `direction: as_claimed | opposite` relative to the hypothesis title.
 
 For **models** (trades in R): N, win rate, expectancy (net), 95% CI (t-based and bootstrap 10k),
 t-stat, profit factor, SQN, max drawdown in R, longest losing streak, per-year expectancy,
@@ -37,6 +50,15 @@ per-regime-tercile expectancy, cost as % of gross expectancy.
   (see docs/JEV_INTEGRATION.md §6.1); re-issue as v1.1 once a prior-only DSL function exists.
 - **Direction check:** a verdict must say whether the effect runs the way the hypothesis *title*
   claims. A significant result in the opposite direction is reported as such, not as the title confirmed.
+- **Outcome window must start at or after the decision time.** Every DAY column documents
+  `starts_at_h` (earliest data it uses) alongside `available_at_h`; the loader rejects an `outcome`
+  whose `starts_at_h < decision_time_h`. Example of the trap: H013 decides at 09:30 but its outcome
+  `ny_range` covers 07:00–16:00, so a big 07:00–09:30 move makes both condition and outcome true by
+  construction. Measured on real data 2026-09-26: with the outcome restricted to 09:30–16:00 the
+  effect vanished (IS +6 pp, p=0.06; OOS +2 pp, p=0.67; median 43 vs 41 pips).
+- **Verified 2026-09-26, H014:** with a prior-60-day threshold instead of the full-sample one, IS lift
+  is +2 to +5 pp (p 0.3–0.6), i.e. noise. The full-sample 20th-percentile flagged 47% of 2024 days but
+  3% of 2022 days: it was selecting calm *years*, not calm *days*.
 
 ## 4. Multiple testing — the ledger
 

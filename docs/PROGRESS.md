@@ -651,9 +651,50 @@ code changes, since fixes bump m):
 - `london_sweep_reversal` v1.0 OOS CI [-0.42, -0.04] (n=183) is wholly negative but labelled
   "not proven" by `__main__.py` -> needs a "negative edge" verdict word (Akash to choose).
 
+## 2026-09-26 (second pass) — independent audit of the Phase 0–5 build, verified on real data
+
+Asked by Akash to check the work so far with quality/realism/fail-proofing in mind. Everything below
+was re-run, not read off the reports.
+
+**Reproducibility: good.** Re-running `nylab run` on his 5-yr CSV in a fresh sandbox reproduced
+`reports/20260925-1914` exactly (max difference 1e-16). The DSL safety, ledger, no-leak replay
+tests and code structure are solid work.
+
+**Showstopper, now fixed:** his `.venv` has pandas 3.0.6. On it `nylab run` crashed on real data
+(`idxmax ... all NA values`) and 9 tests failed; they only passed in the sandbox on pandas 2.3.
+So the pipeline had never run successfully on his own laptop. Fixed two spots (see ROADMAP 5.8),
+verified 135/135 on both pandas 2.3.3 and 3.0.6 and a byte-identical real-data report on both.
+`requirements.txt` now caps versions; `run_tests.bat` added; CLAUDE.md §5a now requires his-machine
+test passes before a phase is "done".
+
+**Both "significant" hypotheses were artifacts (checked twice: numbers, then code):**
+- H014 (quiet Asia → NY range): the 20th-percentile cut-off was computed over all 5 years incl. OOS.
+  It flagged 47% of 2024 days and 3% of 2022 days, so it was picking calm years. With a prior-60-day
+  cut-off: IS lift +2 to +5 pp, p 0.3–0.6 → noise.
+- H013 (ADR used >80% by 09:30 → NY range): the outcome `ny_range` spans 07:00–16:00, overlapping
+  the 07:00–09:30 part of the condition. With the outcome measured 09:30–16:00 only: IS +6 pp
+  (p 0.06), OOS +2 pp (p 0.67), median 43 vs 41 pips → noise.
+- What IS real (descriptive, not an entry signal): plain volatility persistence. If yesterday's
+  09:30–16:00 range was above its prior-60 median, today's is above too 55% vs 39% (IS, z=4.8) and
+  51% vs 40% (OOS, z=2.2). Useful for sizing/targets and as a counted context filter in Phase 7.
+
+**Other engine issues (fix in ROADMAP 5.7):** p-values use IS+OOS combined (should be IS only);
+one-sample test vs a baseline that contains the condition days (use condition vs complement);
+`wilson_ci` is really the Wald formula; the 5-td embargo in RESEARCH_PROTOCOL §1 isn't implemented;
+H015 is concurrent (decision 16:00 = outcome time), so descriptive, not predictive; the example model
+(OOS CI [−0.42, −0.04], n=183) is labelled "not proven" though it is significantly negative.
+
+**Realism notes for later (not blocking):** bars come from MetaQuotes-Demo, where `spread_pts` is 0 on
+52% of bars, so the 1.0-pip cost floor does all the work. Before Phase 8's pass simulator, get
+Maven's real EURUSD spread + commission (MT5 Specification window on his Maven login, or a week of
+Maven bars with spread), and add a news-bar cost multiplier around 08:30/10:00/14:00 releases.
+
 ## Next up
 
-1. Send Akash the fresh review page (now covering all 6 sessions incl. `lon_ny_gap`) and score
+0. Akash: double-click `run_tests.bat` and paste the last line (confirms the pandas-3 fix on his laptop).
+1. ROADMAP 5.7 (statistics integrity) before any new hypothesis or model — needs his OK since it
+   bumps m and changes verdicts.
+2. Send Akash the fresh review page (now covering all 6 sessions incl. `lon_ny_gap`) and score
    his second pass once he returns it -- this is what decides whether 5.6's checkbox flips
    (ticket's own accept criteria: >=80% agreement).
 

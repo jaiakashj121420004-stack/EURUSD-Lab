@@ -132,6 +132,37 @@ Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.
       agree/disagree; if agreement < 80% for a label, adjust thresholds *with him* and re-validate.
 **Accept:** AT-02 incl. the cross-session planted edge; label validation ≥ 80% agreement.
 
+## Phase 5.7 — Statistics integrity (added 2026-09-26, do BEFORE any new research)
+Why: a review on 2026-09-26 re-ran H013/H014 on real data and found both of the lab's only
+"significant" results were measurement artifacts (details: RESEARCH_PROTOCOL §3, PROGRESS 2026-09-26).
+The machinery must make these mistakes impossible, not just fixed once.
+- [ ] 5.7.1 DSL: prior-only threshold functions, e.g. `quantile_prior(col, q, n=60)` and
+      `median_prior(col, n=60)` (value for day t uses days t−n … t−1 only). Loader rejects plain
+      `quantile()`/`median()` inside `condition` (allowed in `outcome`/`baseline`).
+- [ ] 5.7.2 `COLUMN_DOCS` gains `starts_at_h`; loader rejects an `outcome` with
+      `starts_at_h < decision_time_h`. Add clean post-decision outcome columns, e.g. `r0930_1600`
+      (09:30–16:00 range, pips) and its `_rel` version vs prior-20-day median.
+- [ ] 5.7.3 Engine: p from **IS only**; two-proportion test condition vs complement; true Wilson CI;
+      5-td embargo between IS and OOS; `direction` field (as_claimed / opposite); effect in pips.
+- [ ] 5.7.4 Re-issue H013/H014 as **v1.1** with prior-only thresholds, post-09:30 outcomes and
+      correctly-directed titles (m += 2). H015 re-labelled *descriptive* (decision 16:00 = outcome time,
+      nothing left to predict). Expected result from the 2026-09-26 check: both noise.
+- [ ] 5.7.5 Model verdict: OOS n ≥ 100 and CI upper < 0 → `negative` (new verdict word, Akash to
+      confirm). `london_sweep_reversal` v1.0 becomes `negative`.
+- [ ] 5.7.6 **Artifact-catching fixtures** (the mistake-proofing): a synthetic 5-yr series with two
+      volatility eras and NO day-level edge → a full-sample-threshold hypothesis must be REJECTED by the
+      loader, and its prior-only twin must come out `noise`. A fixture where the outcome window overlaps
+      the condition → loader rejects. These become AT-05.
+**Accept:** AT-01..AT-05 pass; AT-02's planted edge still reaches `survives-oos` with IS-only p (if it
+no longer does on 5 yrs, strengthen the planted fixture — do NOT loosen the rule); `run_tests.bat`
+passes on Akash's laptop.
+
+## Phase 5.8 — Environment pinning (partly done 2026-09-26)
+- [x] 5.8.1 pandas-3 crashes fixed (`sessions._news_for_window`, `cross_session.combined_label`);
+      real-data output byte-identical on pandas 2.3.3 and 3.0.6; 135/135 tests on both.
+- [x] 5.8.2 `requirements.txt` caps pandas to tested versions; `run_tests.bat` for his machine.
+- [ ] 5.8.3 Akash runs `run_tests.bat` once and reports the last line.
+
 ## Phase 6 — Replay trainer v2 (2 days)
 - [ ] 6.1 Filters on session character, news families/surprise, raids, ADR ratio, advanced DSL.
 - [ ] 6.2 Hide-outcome columns + spoiler icons; blind mode. 6.3 Presets (save/load; agent-generated).
