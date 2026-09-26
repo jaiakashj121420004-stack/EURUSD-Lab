@@ -689,14 +689,27 @@ H015 is concurrent (decision 16:00 = outcome time), so descriptive, not predicti
 Maven's real EURUSD spread + commission (MT5 Specification window on his Maven login, or a week of
 Maven bars with spread), and add a news-bar cost multiplier around 08:30/10:00/14:00 releases.
 
+**`nyam_sb` widened to 10:00-12:00 (2026-09-26):** after seeing the fresh 6-session review
+page, Akash noticed 11:00-12:00 looked uncovered on it -- not actually true in the underlying
+model (that hour was always inside the broad `nyam` session, plus `lon_close`), but true on the
+review page specifically, since `nyam` isn't shown there (dropped in the nyam_kz/nyam_sb swap).
+Rather than adding a third small session to patch the display, he chose to just widen `nyam_sb`
+itself from 10-11 to 10-12 in `config/windows.yaml` -- one-line config change, no code touched
+since every consumer (`sessions.py`, `cross_session.py`, `label_validate.py`) reads the window
+bounds from `cfg.sessions()` generically. Flagged for him (not silently absorbed): this makes
+`nyam_sb` a 2-hour window, no longer the strict 1-hour ICT "Silver Bullet" concept -- more
+accurately "NY AM killzone's second half" now, Silver Bullet included. Documented in
+`docs/SESSIONS_AND_CONTEXT.md`'s S1 table. Cache rebuilt, review sample regenerated (still 34
+days), full suite (135 tests) still passes -- no test hardcoded `nyam_sb`'s real bounds.
+
 ## Next up
 
 0. Akash: double-click `run_tests.bat` and paste the last line (confirms the pandas-3 fix on his laptop).
 1. ROADMAP 5.7 (statistics integrity) before any new hypothesis or model — needs his OK since it
    bumps m and changes verdicts.
-2. Send Akash the fresh review page (now covering all 6 sessions incl. `lon_ny_gap`) and score
-   his second pass once he returns it -- this is what decides whether 5.6's checkbox flips
-   (ticket's own accept criteria: >=80% agreement).
+2. Send Akash the fresh review page (6 sessions, `nyam_sb` now 10:00-12:00) and score his second
+   pass once he returns it -- this is what decides whether 5.6's checkbox flips (ticket's own
+   accept criteria: >=80% agreement).
 
 The project has 11 phases total (0 through 10): 0 Reproduce v0 (done), 1 Package refactor (done),
 2 Replay trainer MVP (done), 3 Ledger/hypothesis stats (done), 4 Economic calendar (done), 5 All
