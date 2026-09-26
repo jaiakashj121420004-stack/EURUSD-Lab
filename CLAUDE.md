@@ -14,11 +14,13 @@
 - **User:** Akash. Discretionary trader who has finished *The Trader's Codex* (an ICT / Smart Money
   Concepts encyclopedia). Not a beginner, not a programmer by trade. Uses **MT5 on a Windows laptop**.
   Instrument: **EURUSD** only (design must allow adding pairs later via config).
-- **Account he trades:** Maven Trading 2-step challenge, **$5,000** account (≈ $22–23 per attempt). Step 1 target
-  **+10%**, step 2 target **+8%**; **4% daily** and **8% overall** drawdown, both **static and balance-based**.
-  He will stay on $5k until consistently profitable on 2–3 accounts. Use these limits for every sizing /
-  Monte Carlo / pass-probability output and in the replay trainer's account panel. Verify any other Maven
-  rules (min days, consistency, news, lot caps) with him — do not assume.
+- **Account he trades:** Maven Trading challenge, **$5,000** account (≈ $22–23 per attempt). He will stay on
+  $5k until consistently profitable on 2–3 accounts. **The rules come from `config/prop.yaml`** (verified from
+  maventrading.com 2026-09-24; Akash chose the verified numbers over this file's original guess). Default
+  program Standard 2-Step: targets **+8% / +5%**, **4% daily**, **8% overall** (static, balance-based),
+  3 profitable days ≥ 0.5% per phase, no open/close within 2 min of red news. (This line previously said
+  +10%/+8%; that was stale, corrected 2026-09-26.) Which program he is actually on is still to confirm.
+  Use prop.yaml for every sizing / Monte Carlo / pass-probability output and the replay account panel.
 - **What he wants:** (1) to discover and prove a strategy of his own with data, (2) to understand how the
   sessions relate to each other, (3) to practise on historical days for free, jumping straight to any
   date or to days matching a filter instead of scrolling.
@@ -68,6 +70,11 @@ These override any convenience. If a task seems to require breaking one, stop an
    Otherwise say "promising", "not proven" or "noise".
 8. **Not financial advice** footer on every report; never tell him to trade something live.
 9. **New York time** everywhere in outputs (DST-aware). Broker server time is converted on load.
+10. **External AI models are research subjects, never authorities** (added 2026-09-26, see
+    docs/JEV_INTEGRATION.md). A probabilistic model (Jev, another LLM, anything non-deterministic) may
+    never enforce rules 1–9. Hard rules stay deterministic code + tests. Any such model's output used in
+    research must be version-pinned, cached with a hash of its exact input, read back from the cache
+    on re-runs, and evaluated under RESEARCH_PROTOCOL §11 like any other hypothesis.
 
 ---
 
@@ -164,3 +171,4 @@ Session character: trend / reversal / range / chop / quiet · IS/OOS in/out-of-s
 1. `docs/DATA_AND_TIME.md` 2. `docs/ARCHITECTURE.md` 3. `docs/SESSIONS_AND_CONTEXT.md`
 4. `docs/FEATURES_SPEC.md` 5. `docs/RESEARCH_PROTOCOL.md` 6. `docs/REPLAY_TRAINER.md`
 7. `docs/ROADMAP.md` — then start Phase 0.
+8. `docs/JEV_INTEGRATION.md` — only when external AI models come up.

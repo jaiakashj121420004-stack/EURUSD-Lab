@@ -173,7 +173,11 @@ Follow CLAUDE.md §6. Suggested first questions (each = counted hypothesis or fa
 5. Silver Bullet FVG model: which SB window (London / NY AM / NY PM) has positive OOS expectancy, and
    does a London-character filter improve it?
 6. FOMC days: NY PM SB behaviour vs normal days (descriptive only — too few days to test).
+7. *(Optional, needs Jev API access + Phase 5.6 labels frozen)* Experiment J1: does Jev's 09:30 NY-direction
+   probability beat the base rate AND a logistic regression on the same features OOS? Pre-registered in
+   docs/JEV_INTEGRATION.md §5; m += 9. Jev as a model context filter only once a Phase 7 model is `candidate`.
 
 ## Out of scope
-Live order execution; signals pushed to phone; "AI predicts price"; scraping paid data; other symbols
-until the user asks.
+Live order execution; signals pushed to phone; "AI predicts price" **as a trading signal** (testing an
+external model as a counted experiment under RESEARCH_PROTOCOL §11 is allowed -- amended 2026-09-26);
+scraping paid data; other symbols until the user asks.

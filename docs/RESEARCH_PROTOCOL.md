@@ -30,6 +30,13 @@ per-regime-tercile expectancy, cost as % of gross expectancy.
   on the day truncated at bar i; values for bars ≤ i must be identical. Run for 50 random (td, i).
 - Swing points: assert a swing at bar j is not visible to any computation before bar j + n.
 - The engine asserts `exit_time > entry_time` and entry price ∈ [low, high] of the entry bar.
+- **Thresholds in a `condition` use prior data only** (added 2026-09-26). A cut-off such as "Asia range
+  in its bottom 20%" must be computed from days *before* the day being evaluated (rolling/expanding,
+  like `range_rel`), never from a full-sample `quantile()`/`median()` that includes later days and OOS.
+  Full-sample functions remain fine in `outcome`/`baseline`. Known non-compliant: H013, H014 v1.0
+  (see docs/JEV_INTEGRATION.md §6.1); re-issue as v1.1 once a prior-only DSL function exists.
+- **Direction check:** a verdict must say whether the effect runs the way the hypothesis *title*
+  claims. A significant result in the opposite direction is reported as such, not as the title confirmed.
 
 ## 4. Multiple testing — the ledger
 
@@ -97,3 +104,21 @@ guaranteed dozens of spectacular flukes. Rules (details in SESSIONS_AND_CONTEXT 
 - Prefer using session context as a **filter on a model** (one test per filter) over predicting direction.
 - Session-character thresholds are frozen once validated (ROADMAP 5.6). Changing them = new version of
   every dependent hypothesis.
+
+
+## 11. External AI models (Jev, LLMs) as research subjects (added 2026-09-26)
+
+An external model's opinion is treated as one more hypothesis/filter, never as ground truth.
+Full rationale and the first pre-registered experiment (J1): docs/JEV_INTEGRATION.md.
+1. **State = only information available at decision time**: build it from DAY/SESSION columns with
+   `available_at_h ≤ decision_time_h` (reuse COLUMN_DOCS); never raw future bars.
+2. **Anonymise** against memorisation: no dates/years, no absolute prices (pips vs day open, ADR
+   multiples), no raw news actuals (surprise buckets only).
+3. **Pin and cache**: exact model version (never a moving alias), response cached keyed by
+   sha256(state + schema + option order + version); pipeline runs read the cache only.
+4. **Control option order** (ask in ≥ 2 orders, average, report the gap) for Choice-type outputs.
+5. **Beat a dumb baseline**: base rate AND a logistic regression on the same features, on OOS Brier /
+   log-loss; plot a reliability curve to test any "calibrated" claim directly.
+6. **Count everything**: each (question wording × threshold) is one ledger test, chosen on IS only;
+   OOS runs once. Same Bonferroni / OOS / robustness bars as §4–§5.
+7. **Never gates execution or enforces a rule** (CLAUDE.md rule 10).

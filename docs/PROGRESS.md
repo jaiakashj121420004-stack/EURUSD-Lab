@@ -636,6 +636,21 @@ Fresh review sample regenerated (now 34 days -- the stratified floor grew by one
 `lon_ny_gap`'s own rare labels) with all 6 sessions: `asia / lon / lon_ny_gap / nyam_kz /
 nyam_sb / nypm`.
 
+## 2026-09-26 — Jev (TypeSafe AI) assessment + review findings (docs only, no code changed)
+
+Akash asked whether a Claude + Jev agent would be the strongest combination. Full answer:
+docs/JEV_INTEGRATION.md. Short: Jev can be integrated but adds ~nothing until the lab has an edge;
+one cheap pre-registered experiment (J1) and an optional replay "discipline coach" role are specified.
+Rule/doc changes made (each cross-checked against existing rules): CLAUDE.md rule 10 + Maven numbers
+now sourced from prop.yaml; RESEARCH_PROTOCOL §3 prior-only thresholds + direction check, new §11;
+ROADMAP out-of-scope wording + Phase 10 question 7. Found while reviewing (need Akash's OK before
+code changes, since fixes bump m):
+- H013/H014 are significant in the OPPOSITE direction to their titles (volatility clustering), and
+  their `quantile()`/`median()` thresholds use the full 5-year sample incl. OOS -> re-issue as v1.1
+  with a prior-only DSL threshold and correct titles; make verdicts direction-aware.
+- `london_sweep_reversal` v1.0 OOS CI [-0.42, -0.04] (n=183) is wholly negative but labelled
+  "not proven" by `__main__.py` -> needs a "negative edge" verdict word (Akash to choose).
+
 ## Next up
 
 1. Send Akash the fresh review page (now covering all 6 sessions incl. `lon_ny_gap`) and score
