@@ -11,7 +11,9 @@ sessions:
   lon_ny_gap: [5, 7]
   nyam: [7, 12]
   nyam_kz: [7, 10]
-  nyam_sb: [10, 11]
+  nyam_sb: [10, 12]  # widened 2026-09-26 (Akash's request) to close the 11-12 gap left once
+                     # the broad `nyam` session was dropped from the review page; no longer a
+                     # strict 1-hour ICT "Silver Bullet" window, more "NY AM killzone's 2nd half"
   lunch: [12, 13.5]
   nypm: [13.5, 16]
   nypm_sb: [14, 15]

@@ -21,7 +21,7 @@ false positives.
 | `lon_ny_gap` | London→NY gap | 05:00–07:00 | 5 … 7 | 7 | added 2026-09-25 at Akash's request; untracked stretch between `lon`'s close and `nyam_kz`'s start |
 | `nyam` | NY AM session | 07:00–12:00 | 7 … 12 | 12 | |
 | `nyam_kz` | NY AM killzone | 07:00–10:00 | 7 … 10 | 10 | |
-| `nyam_sb` | NY AM Silver Bullet | 10:00–11:00 | 10 … 11 | 11 | |
+| `nyam_sb` | NY AM Silver Bullet (widened) | 10:00–12:00 | 10 … 12 | 12 | widened 2026-09-26 to close the 11-12 gap left by dropping `nyam` from the review page; no longer the strict 1hr ICT Silver Bullet window |
 | `lunch` | NY lunch | 12:00–13:30 | 12 … 13.5 | 13.5 | usually no-trade; still measured |
 | `nypm` | NY PM session | 13:30–16:00 | 13.5 … 16 | 16 | |
 | `nypm_sb` | NY PM Silver Bullet | 14:00–15:00 | 14 … 15 | 15 | FOMC days: 14:00 release inside it |
