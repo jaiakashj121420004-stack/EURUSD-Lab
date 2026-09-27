@@ -161,7 +161,7 @@ passes on Akash's laptop.
 - [x] 5.8.1 pandas-3 crashes fixed (`sessions._news_for_window`, `cross_session.combined_label`);
       real-data output byte-identical on pandas 2.3.3 and 3.0.6; 135/135 tests on both.
 - [x] 5.8.2 `requirements.txt` caps pandas to tested versions; `run_tests.bat` for his machine.
-- [ ] 5.8.3 Akash runs `run_tests.bat` once and reports the last line.
+- [x] 5.8.3 Confirmed on Akash's machine 2026-09-27: python 3.14.6, pandas 3.0.6, numpy 2.5.3 -- 135/135 passed.
 
 ## Phase 6 — Replay trainer v2 (2 days)
 - [ ] 6.1 Filters on session character, news families/surprise, raids, ADR ratio, advanced DSL.
