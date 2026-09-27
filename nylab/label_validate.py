@@ -273,112 +273,41 @@ def build_payload(bars: pd.DataFrame, days: pd.DataFrame, sessions_cfg: dict,
     return dict(days=days_out, generated_for="EURUSD Session Research Lab -- ROADMAP 5.6")
 
 
-_HTML_TEMPLATE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+_HTML_TEMPLATE = r"""<!doctype html><html><head><meta charset="utf-8">
 <title>Label validation -- ROADMAP 5.6</title>
 <style>
-/* Porcelain (light, default) / Espresso (dark) -- design/preview.html is the approved source
-   of truth for these token values; docs/DESIGN_SYSTEM.md documents the system in prose. */
-:root{
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Manrope, sans-serif;
-  --font-mono: "SF Mono", "Cascadia Code", ui-monospace, "Roboto Mono", monospace;
-  --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
-  --t-fast: 140ms; --t-med: 320ms;
-  --radius-card: 18px; --radius-pill: 999px;
-  --base: #F0EDE8; --shadow-dark: rgba(163,150,133,.45); --shadow-light: #FFFFFF;
-  --text-1: #2B2822; --text-2: #6B6459; --text-3: #968F82;
-  --accent: #0EA5A0; --accent-rgb: 14,165,160;
-  --amber: #E39B2F; --amber-rgb: 227,155,47;
-  --bull: #0F9D76; --bear: #E5484D;
-  --glass-border-dim: rgba(163,150,133,.18);
-  --focus-ring: rgba(14,165,160,.55);
-}
-:root[data-theme="dark"]{
-  --base: #1E1B18; --shadow-dark: #12100E; --shadow-light: rgba(255,255,255,.045);
-  --text-1: #EFE9E1; --text-2: #A79E92; --text-3: #746B60;
-  --accent: #2DD4BF; --accent-rgb: 45,212,191;
-  --amber: #F5B04C; --amber-rgb: 245,176,76;
-  --bull: #22C39A; --bear: #FF6369;
-  --glass-border-dim: rgba(0,0,0,.4);
-  --focus-ring: rgba(45,212,191,.6);
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]):not([data-theme="dark"]){
-    --base: #1E1B18; --shadow-dark: #12100E; --shadow-light: rgba(255,255,255,.045);
-    --text-1: #EFE9E1; --text-2: #A79E92; --text-3: #746B60;
-    --accent: #2DD4BF; --accent-rgb: 45,212,191;
-    --amber: #F5B04C; --amber-rgb: 245,176,76;
-    --bull: #22C39A; --bear: #FF6369;
-    --glass-border-dim: rgba(0,0,0,.4);
-    --focus-ring: rgba(45,212,191,.6);
-  }
-}
-*{box-sizing:border-box}
-body{font-family:var(--font-ui);background:var(--base);color:var(--text-1);margin:0;padding:0 0 70px;
-  transition:background var(--t-med) var(--ease-glide),color var(--t-med) var(--ease-glide)}
-.tabular{font-variant-numeric:tabular-nums;font-family:var(--font-mono)}
-button,input{font-family:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--focus-ring);outline-offset:3px;border-radius:8px}
-.elev-raised{background:var(--base);box-shadow:8px 8px 18px var(--shadow-dark),-8px -8px 18px var(--shadow-light);
-  transition:box-shadow var(--t-fast) var(--ease-glide)}
-.elev-raised-soft{background:var(--base);box-shadow:4px 4px 10px var(--shadow-dark),-4px -4px 10px var(--shadow-light);
-  transition:box-shadow var(--t-fast) var(--ease-glide)}
-.elev-inset{background:var(--base);box-shadow:inset 5px 5px 12px var(--shadow-dark),inset -5px -5px 12px var(--shadow-light)}
-.press:active{box-shadow:inset 4px 4px 10px var(--shadow-dark),inset -4px -4px 10px var(--shadow-light)!important;
-  transform:scale(0.98);transition:box-shadow 80ms linear,transform 80ms linear}
-header{background:var(--base);padding:14px 20px;border-bottom:1px solid var(--glass-border-dim);
-  position:sticky;top:0;z-index:5;display:flex;align-items:flex-start;gap:14px}
-header .htext{flex:1;min-width:0}
-h1{font-size:18px;margin:0;color:var(--text-1)}
-.muted{color:var(--text-2);font-size:13px}
-#themeBtn{width:36px;height:36px;min-width:36px;border-radius:50%;border:none;background:none;
-  color:var(--text-2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
-#themeBtn:hover{color:var(--accent)}
-#themeBtn svg{width:18px;height:18px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.day{margin:18px auto;max-width:1060px;border-radius:var(--radius-card);padding:16px 20px}
-.day h2{margin:0 0 8px;font-size:15px;color:var(--text-1)}
-canvas{width:100%;background:var(--base);border-radius:12px;display:block}
-.zoombar{margin:8px 0 10px;display:flex;flex-wrap:wrap;gap:6px}
-.zoombtn{border:none;background:var(--base);color:var(--text-2);border-radius:var(--radius-pill);
-  padding:6px 12px;cursor:pointer;font-size:12px;box-shadow:4px 4px 10px var(--shadow-dark),-4px -4px 10px var(--shadow-light)}
-.zoombtn.active{color:var(--accent);font-weight:700;box-shadow:inset 3px 3px 7px var(--shadow-dark),inset -3px -3px 7px var(--shadow-light)}
+body{font-family:Segoe UI,Arial,sans-serif;background:#0f1a2e;color:#e8ecf5;margin:0;padding:0 0 60px}
+header{background:#0b1220;padding:14px 20px;border-bottom:2px solid #e8c77a;position:sticky;top:0;z-index:5}
+h1{font-size:18px;margin:0}
+.muted{color:#9aa6bd;font-size:13px}
+.day{margin:18px auto;max-width:1060px;background:#16213a;border-radius:10px;padding:14px 18px;border:1px solid #263457}
+.day h2{margin:0 0 6px;font-size:15px;color:#e8c77a}
+canvas{width:100%;background:#0b1220;border-radius:6px;display:block}
+.zoombar{margin:8px 0 4px;display:flex;flex-wrap:wrap;gap:6px}
+.zoombtn{border:1px solid #3b4a70;background:#1c2a48;color:#e8ecf5;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}
+.zoombtn.active{background:#2f73d6;border-color:#2f73d6}
 table{border-collapse:collapse;width:100%;margin-top:10px;font-size:13px}
-th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--glass-border-dim)}
-th{color:var(--text-3);font-weight:600}
-.featvals{display:block;color:var(--text-3);font-size:11px;margin-top:2px}
-button.ans{border:none;background:var(--base);color:var(--text-2);border-radius:var(--radius-pill);
-  padding:5px 14px;cursor:pointer;margin-right:6px;font-size:12px;
-  box-shadow:4px 4px 10px var(--shadow-dark),-4px -4px 10px var(--shadow-light)}
-button.ans.sel-agree{color:var(--bull);font-weight:700;box-shadow:inset 3px 3px 7px var(--shadow-dark),inset -3px -3px 7px var(--shadow-light)}
-button.ans.sel-disagree{color:var(--bear);font-weight:700;box-shadow:inset 3px 3px 7px var(--shadow-dark),inset -3px -3px 7px var(--shadow-light)}
-#bar{position:sticky;bottom:0;background:var(--base);padding:14px 20px;border-top:1px solid var(--glass-border-dim);
-  text-align:center;box-shadow:0 -6px 18px var(--shadow-dark)}
-#bar button{background:var(--accent);color:#fff;border:none;border-radius:var(--radius-pill);
-  padding:10px 24px;font-size:14px;cursor:pointer;font-weight:600}
-#progress{margin-bottom:8px;font-size:13px;color:var(--text-2)}
-input.note{width:96%;background:var(--base);border:none;color:var(--text-1);border-radius:8px;
-  padding:6px 8px;font-size:12px;margin-top:4px;box-shadow:inset 3px 3px 7px var(--shadow-dark),inset -3px -3px 7px var(--shadow-light)}
-details{max-width:1060px;margin:14px auto;border-radius:var(--radius-card);padding:12px 20px}
-summary{cursor:pointer;color:var(--accent);font-size:14px;font-weight:700}
+th,td{padding:5px 8px;text-align:left;border-bottom:1px solid #263457}
+th{color:#9aa6bd}
+button.ans{border:1px solid #3b4a70;background:#1c2a48;color:#e8ecf5;border-radius:6px;padding:4px 12px;cursor:pointer;margin-right:4px;font-size:12px}
+button.ans.sel-agree{background:#119469;border-color:#119469}
+button.ans.sel-disagree{background:#c8354b;border-color:#c8354b}
+#bar{position:sticky;bottom:0;background:#0b1220;padding:12px 20px;border-top:2px solid #e8c77a;text-align:center}
+#bar button{background:#2f73d6;color:#fff;border:none;border-radius:6px;padding:10px 22px;font-size:14px;cursor:pointer}
+#progress{margin-bottom:6px;font-size:13px;color:#9aa6bd}
+input.note{width:96%;background:#0b1220;border:1px solid #263457;color:#e8ecf5;border-radius:4px;padding:4px 6px;font-size:12px;margin-top:4px}
+details{max-width:1060px;margin:14px auto;background:#16213a;border:1px solid #263457;border-radius:10px;padding:10px 18px}
+summary{cursor:pointer;color:#e8c77a;font-size:14px;font-weight:600}
 details table{margin-top:10px}
-.lbl{text-decoration:underline dotted var(--text-3);cursor:help}
-.footer-note{max-width:1060px;margin:18px auto 0;color:var(--text-3);font-size:11.5px;text-align:center}
-@media (max-width:640px){
-  .day, details, .footer-note{max-width:100%;border-radius:0;margin-left:0;margin-right:0}
-  header{padding:12px 16px} h1{font-size:16px}
-}
-</style></head><body class="elev-flat">
-<header><div class="htext"><h1>Session-character &amp; day-type label validation</h1>
+.lbl{text-decoration:underline dotted #9aa6bd;cursor:help}
+</style></head><body>
+<header><h1>Session-character &amp; day-type label validation</h1>
 <div class="muted">ROADMAP 5.6 -- for each label below: does it look right on the chart? Use the zoom buttons to
 look closely at one session at a time, click Agree or Disagree for every row, then use "Download my answers"
-at the bottom and send that file back. %%COUNT%% days, curated near a rule boundary so each one is an
-informative call, not an obvious one. Hover any bold label for a plain-English definition, or open
-"What do these labels mean?" below for the full list. Dashed lines on the full-day chart mark yesterday's
-high (PDH) and low (PDL) for day_type calls.</div></div>
-<button id="themeBtn" aria-label="Toggle theme"><svg id="themeIcon" viewBox="0 0 24 24"></svg></button>
-</header>
+at the bottom and send that file back. %%COUNT%% days. Hover any bold label for a plain-English definition,
+or open "What do these labels mean?" below for the full list.</div></header>
 
-<details class="elev-raised">
+<details>
 <summary>What do these labels mean? (click to expand)</summary>
 <p class="muted">These are the SAME rules for every session (asia/london/etc.) -- "character" describes how that
 one session's price action behaved. Priority when a session could match more than one rule: quiet beats
@@ -417,8 +346,7 @@ the middle.</td></tr>
 </details>
 
 <div id="days"></div>
-<div id="bar" class="elev-raised"><div id="progress">0 / 0 answered</div><button onclick="downloadAnswers()">Download my answers</button></div>
-<div class="footer-note">Not financial advice -- this is a rule-review tool, no live trading, read-only against MT5.</div>
+<div id="bar"><div id="progress">0 / 0 answered</div><button onclick="downloadAnswers()">Download my answers</button></div>
 <script>
 const DATA = %%DATA%%;
 const answers = {};
@@ -438,52 +366,14 @@ const LABEL_DESC = {
 };
 const zoomState = {};
 
-/* ---------- THEME (same pattern as design/preview.html) ---------- */
-(function(){
-  var root = document.documentElement;
-  function safeGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
-  function safeSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
-  var stored = safeGet('eurusd-theme');
-  if(stored === 'light' || stored === 'dark'){ root.setAttribute('data-theme', stored); }
-  function current(){
-    var a = root.getAttribute('data-theme');
-    if(a) return a;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  }
-  function setIcon(){
-    document.getElementById('themeIcon').innerHTML = current() === 'dark'
-      ? '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>'
-      : '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.2" y1="4.2" x2="5.6" y2="5.6"/><line x1="18.4" y1="18.4" x2="19.8" y2="19.8"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.2" y1="19.8" x2="5.6" y2="18.4"/><line x1="18.4" y1="5.6" x2="19.8" y2="4.2"/>';
-  }
-  setIcon();
-  document.getElementById('themeBtn').addEventListener('click', function(){
-    var next = current() === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', next); safeSet('eurusd-theme', next); setIcon();
-    Object.keys(zoomState).forEach(function(idx){ render(idx); });
-  });
-})();
-
 function hourLabel(h){
   const c = ((h % 24) + 24) % 24;
   const hh = Math.floor(c);
   return String(hh).padStart(2, "0") + ":00";
 }
 
-function cssVar(name){
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function fmtFeatVals(v){
-  if (v.range_rel == null && v.er == null && v.close_loc == null) return "";
-  const parts = [];
-  if (v.range_rel != null) parts.push("range_rel " + v.range_rel.toFixed(2));
-  if (v.er != null) parts.push("er " + v.er.toFixed(2));
-  if (v.close_loc != null) parts.push("close_loc " + v.close_loc.toFixed(2));
-  return parts.join(" · ");
-}
-
 function drawDay(day, idx){
-  const wrap = document.createElement("div"); wrap.className = "day elev-raised";
+  const wrap = document.createElement("div"); wrap.className = "day";
   const h2 = document.createElement("h2"); h2.textContent = day.td + "  ·  day_type: ";
   const dtLabel = document.createElement("span"); dtLabel.className = "lbl";
   dtLabel.textContent = day.day_type || "—";
@@ -510,16 +400,14 @@ function drawDay(day, idx){
 
   const tbl = document.createElement("table");
   tbl.innerHTML = "<tr><th>Label</th><th>Computed value</th><th>Your call</th><th>Note (optional)</th></tr>";
-  const rows = day.sessions.map(s => ["session:" + s.id, s.label,
-    {range_rel: s.range_rel, er: s.er, close_loc: s.close_loc}]);
-  rows.push(["day_type", day.day_type, {range_rel: null, er: null, close_loc: day.day_close_loc}]);
-  rows.forEach(([key, val, featVals]) => {
+  const rows = day.sessions.map(s => ["session:" + s.id, s.label]);
+  rows.push(["day_type", day.day_type]);
+  rows.forEach(([key, val]) => {
     const tr = document.createElement("tr");
     const ansKey = day.td + "|" + key;
     const desc = LABEL_DESC[val] || "";
-    const fv = fmtFeatVals(featVals);
     tr.innerHTML = "<td>" + key + "</td><td><b class='lbl' title=\"" + desc.replace(/"/g, "&quot;") + "\">" +
-      (val || "—") + "</b>" + (fv ? "<span class='featvals tabular'>" + fv + "</span>" : "") + "</td>" +
+      (val || "—") + "</b></td>" +
       "<td><button class='ans' id='a_" + ansKey + "' onclick=\"setAns('" + ansKey + "','agree')\">Agree</button>" +
       "<button class='ans' id='d_" + ansKey + "' onclick=\"setAns('" + ansKey + "','disagree')\">Disagree</button></td>" +
       "<td><input class='note' placeholder='optional note' oninput=\"setNote('" + ansKey + "', this.value)\"></td>";
@@ -556,17 +444,10 @@ function render(idx){
     winLo = s.lo - pad; winHi = s.hi + pad;
   }
   const bars = day.bars.filter(b => b[0] >= winLo && b[0] <= winHi);
-  const muted = cssVar("--text-3") || "#9aa6bd";
-  const accent = cssVar("--accent") || "#0EA5A0";
-  const bull = cssVar("--bull") || "#0F9D76";
-  const bear = cssVar("--bear") || "#E5484D";
-  if (!bars.length) { ctx.fillStyle = muted; ctx.fillText("no bars in this window", 10, 20); return; }
+  if (!bars.length) { ctx.fillStyle = "#9aa6bd"; ctx.fillText("no bars in this window", 10, 20); return; }
 
   const W = canvas.width, H = canvas.height, padL = 55, padR = 12, padT = 30, padB = 26;
-  let hi = Math.max(...bars.map(b => b[2])), lo = Math.min(...bars.map(b => b[3]));
-  // widen the price axis to fit PDH/PDL reference lines when they're in view (full-day zoom)
-  if (key === "full" && day.pdh != null) hi = Math.max(hi, day.pdh);
-  if (key === "full" && day.pdl != null) lo = Math.min(lo, day.pdl);
+  const hi = Math.max(...bars.map(b => b[2])), lo = Math.min(...bars.map(b => b[3]));
   const span = (hi - lo) || 1e-6;
   const xOf = h => padL + (h - winLo) / (winHi - winLo || 1) * (W - padL - padR);
   const yOf = p => H - padB - (p - lo) / span * (H - padT - padB);
@@ -576,62 +457,38 @@ function render(idx){
   for (let i = 0; i <= 4; i++) {
     const p = lo + span * i / 4;
     const y = yOf(p);
-    ctx.strokeStyle = "rgba(150,143,130,0.18)"; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-    ctx.fillStyle = muted; ctx.fillText(p.toFixed(5), padL - 6, y + 3);
+    ctx.strokeStyle = "rgba(154,166,189,0.15)"; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillStyle = "#9aa6bd"; ctx.fillText(p.toFixed(5), padL - 6, y + 3);
   }
   // hour gridlines: every hour if zoomed (span<=6h), else every 2h
   const hourStep = (winHi - winLo) <= 7 ? 1 : 2;
   ctx.textAlign = "center";
   for (let h = Math.ceil(winLo / hourStep) * hourStep; h <= winHi; h += hourStep) {
     const x = xOf(h);
-    ctx.strokeStyle = "rgba(150,143,130,0.14)"; ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H - padB); ctx.stroke();
-    ctx.fillStyle = muted; ctx.fillText(hourLabel(h), x, H - 8);
+    ctx.strokeStyle = "rgba(154,166,189,0.12)"; ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H - padB); ctx.stroke();
+    ctx.fillStyle = "#9aa6bd"; ctx.fillText(hourLabel(h), x, H - 8);
   }
   // range annotation (pips, assuming EURUSD pip = 0.0001)
-  ctx.textAlign = "left"; ctx.fillStyle = muted;
+  ctx.textAlign = "left"; ctx.fillStyle = "#9aa6bd";
   ctx.fillText("range shown: " + ((hi - lo) / 0.0001).toFixed(1) + " pips", padL, 14);
 
   // session shading + labels (only the ones overlapping this window)
   day.sessions.forEach(s => {
     if (s.hi < winLo || s.lo > winHi) return;
     const x0 = xOf(Math.max(s.lo, winLo)), x1 = xOf(Math.min(s.hi, winHi));
-    ctx.fillStyle = "rgba(" + (getComputedStyle(document.documentElement).getPropertyValue("--amber-rgb") || "227,155,47") + ",0.07)";
-    ctx.fillRect(x0, padT, x1 - x0, H - padT - padB);
-    ctx.strokeStyle = "rgba(" + (getComputedStyle(document.documentElement).getPropertyValue("--amber-rgb") || "227,155,47") + ",0.35)";
-    ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, H - padB); ctx.stroke();
-    ctx.fillStyle = cssVar("--amber") || "#E39B2F"; ctx.textAlign = "left"; ctx.font = "11px sans-serif";
+    ctx.fillStyle = "rgba(232,199,122,0.06)"; ctx.fillRect(x0, padT, x1 - x0, H - padT - padB);
+    ctx.strokeStyle = "rgba(232,199,122,0.35)"; ctx.beginPath(); ctx.moveTo(x0, padT); ctx.lineTo(x0, H - padB); ctx.stroke();
+    ctx.fillStyle = "#e8c77a"; ctx.textAlign = "left"; ctx.font = "11px sans-serif";
     ctx.fillText(s.id + ": " + (s.label || "?"), x0 + 3, padT + 13);
   });
-
-  // previous-day high/low reference lines (day_type calls) -- full-day zoom only: they're
-  // whole-day levels, and drawing them on a single-session zoom (whose window is usually much
-  // narrower than the day's range) would mostly just clip off-canvas or crowd the session's
-  // own labels for no benefit -- Akash's day_type calls happen looking at the full day anyway.
-  if (key === "full") {
-    ctx.setLineDash([5, 4]);
-    ctx.lineWidth = 1.2;
-    if (day.pdh != null) {
-      const y = yOf(day.pdh);
-      ctx.strokeStyle = accent; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-      ctx.setLineDash([]); ctx.fillStyle = accent; ctx.textAlign = "right"; ctx.font = "10px sans-serif";
-      ctx.fillText("PDH " + day.pdh.toFixed(5), W - padR - 2, y - 3); ctx.setLineDash([5, 4]);
-    }
-    if (day.pdl != null) {
-      const y = yOf(day.pdl);
-      ctx.strokeStyle = accent; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-      ctx.setLineDash([]); ctx.fillStyle = accent; ctx.textAlign = "right"; ctx.font = "10px sans-serif";
-      ctx.fillText("PDL " + day.pdl.toFixed(5), W - padR - 2, y + 11); ctx.setLineDash([5, 4]);
-    }
-    ctx.setLineDash([]);
-  }
 
   // candles
   const bw = Math.max(2, (W - padL - padR) / bars.length * 0.7);
   bars.forEach(([h, o, hh, l, c]) => {
     const x = xOf(h);
-    ctx.strokeStyle = c >= o ? bull : bear;
+    ctx.strokeStyle = c >= o ? "#119469" : "#c8354b";
     ctx.beginPath(); ctx.moveTo(x, yOf(hh)); ctx.lineTo(x, yOf(l)); ctx.stroke();
-    ctx.fillStyle = c >= o ? bull : bear;
+    ctx.fillStyle = c >= o ? "#119469" : "#c8354b";
     ctx.fillRect(x - bw / 2, yOf(Math.max(o, c)), bw, Math.max(1, Math.abs(yOf(o) - yOf(c))));
   });
 }
