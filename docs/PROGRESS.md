@@ -763,6 +763,8 @@ the real 5-year cache and wrote `research/label_validation/sample_43.html` (+ it
 34 days (the stratified floor alone is 34; the curated fill only adds days once it's below `n`, same
 "floor never trimmed down" behaviour as before).
 
+**Self-caught bug, fixed before this reached Akash:** an intermediate commit (`6494885`, message: "Restyle label-validation review page...") actually reverted the restyle/feature-values/PDH-PDL work that was already sitting correctly in the prior commit (`7331acf`) -- the file it produced matched its own commit message in words only, not in diff. Caught by re-reading the actual committed file and the already-generated `sample_43.html` before delivery (both still had the old dark/gold template, zero theme toggle), not by trusting the commit message or the build summary. Fixed in `21c8aaa` by restoring `nylab/label_validate.py` to `7331acf`'s version verbatim; 142/142 tests re-confirmed green, and `sample_43.html` was deleted and regenerated from the corrected code before being sent to Akash.
+
 **Known limitations / judgment calls (disclosed, not hidden):** the boundary-distance score treats
 every threshold in a rule's AND/OR cascade as its own independent candidate line and takes the
 row's minimum distance across all of them, rather than modelling each branch's exact AND/OR
