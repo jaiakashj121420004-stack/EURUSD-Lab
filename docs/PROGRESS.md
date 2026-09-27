@@ -718,3 +718,57 @@ nyam_kz/nyam_sb swap, and the new lon_ny_gap session all implemented and tested,
 review sample generated, second review round pending), 6 Replay trainer v2, 7 ICT features &
 models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop
 (ongoing).
+
+## 2026-09-27 — design system approved + label-validation round 3 (curated near-threshold sampling)
+
+**Design system approved.** `design/preview.html` (rejected once earlier, rebuilt, now approved by
+Akash) is the single "Porcelain" (light, default) / "Espresso" (dark) neumorphism+glass system.
+`docs/DESIGN_SYSTEM.md` §3 rewritten from the old "3 undecided palette directions" placeholder to
+the actual approved tokens (pulled from `design/preview.html`, not hand-copied). `nylab/
+label_validate.py`'s label-validation review page is the first real (non-preview) surface restyled
+to it: same CSS custom properties, `.elev-raised`/`.elev-inset` shadow pairs on the header/day
+cards/zoom buttons/Agree-Disagree buttons/bottom bar/note inputs, the same `localStorage`-backed
+theme toggle pattern. All of label-validate's exporter-facing DOM hooks (`.ans`, `.sel-agree`,
+`.sel-disagree`, `.zoombtn`, `.active`, `.lbl`, `#bar`, `#progress`, `downloadAnswers`) kept exactly
+as-is -- only CSS/rendering changed, `score()`'s contract with the page didn't.
+
+**Label-validation round 3: curated near-threshold sampling replaces random fill.** Akash found
+rounds 1-2's random days "tiring and time consuming" and specifically flagged that day_type's
+inside/outside/reversal calls are hard to eyeball without seeing yesterday's actual range. Two
+changes land together (ROADMAP 5.6, still open -- this is groundwork, not the round itself):
+
+- `sample_days_curated()` (new, default strategy): keeps the existing stratified rare-label floor
+  verbatim, but fills the remainder by ranking candidate days by distance to the frozen numeric
+  thresholds in `sessions.py`'s `_label_character`/`_day_type` rule cascades (mirrored as local
+  constants in `label_validate.py`, not imported -- `sessions.py` stays untouched) instead of
+  uniform-random selection. A day earns a place if ANY of its labels sits close to flipping across
+  a rule boundary -- exactly the ambiguous case where Akash's own judgment adds information, versus
+  the "obviously normal"/"obviously trend" days a random sample mostly wastes his time on. Runs over
+  the FULL cached 5-year day table every time, never restricted to a previous round or to days he's
+  already flagged (would be a form of look-ahead into which round produced disagreements). Old
+  `sample_days()` (uniform-random fill) kept unchanged and available via `--strategy random`, for
+  reproducing rounds 1-2.
+- `build_payload()` now also emits the raw range_rel/er/close_loc (session) and day-level
+  close_loc/day_high/day_low/pdh/pdl feature values; the review page shows them as muted text under
+  each label, and draws dashed PDH/PDL reference lines on the full-day chart so day_type calls don't
+  need mental math (session-zoom views don't get the lines -- their window is usually much narrower
+  than the day's own range, so the lines would mostly clip off-canvas there).
+- CLI default changed to `--n 20 --seed 43 --strategy curated` (rounds 1-2 used `--n 30/34 --seed 42
+  --strategy random`, still reproducible via the flag).
+
+**Verified:** 142/142 tests pass (135 before this work + 7 new, covering the curated sampler, its
+boundary-distance helpers, and that its fill genuinely sits closer to a threshold than the random
+fill on the same fixture/seed). `python -m nylab label-validate build --n 20 --seed 43` ran against
+the real 5-year cache and wrote `research/label_validation/sample_43.html` (+ its `_meta.json`) --
+34 days (the stratified floor alone is 34; the curated fill only adds days once it's below `n`, same
+"floor never trimmed down" behaviour as before).
+
+**Known limitations / judgment calls (disclosed, not hidden):** the boundary-distance score treats
+every threshold in a rule's AND/OR cascade as its own independent candidate line and takes the
+row's minimum distance across all of them, rather than modelling each branch's exact AND/OR
+structure -- a closer model would need the underlying price series `label_validate.py` doesn't have
+access to (only the cached `days` table's aggregated columns). Distances are raw, not IQR-normalized
+(range_rel/er/close_loc are all already unit-free ratios in a similar O(1) range on the real data,
+so this doesn't let one feature dominate in practice, and it's easier to sanity-check by eye).
+PDH/PDL reference lines only render on the full-day zoom, not per-session zooms. Not started this
+round: ROADMAP 5.7 (statistics integrity) and Akash actually scoring round 3 once he's reviewed it.

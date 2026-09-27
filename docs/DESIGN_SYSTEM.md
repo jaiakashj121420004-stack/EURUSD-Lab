@@ -2,7 +2,19 @@
 
 Visual layer only. Nothing here changes numbers, routes, or the no-leak/read-only logic (CLAUDE.md
 rules 1–9 always win over anything in this file). This doc is the audit + token/spec reference;
-`design/preview.html` is where the 3 palette directions are actually seen and picked.
+`design/preview.html` is the single **approved** implementation the token values below are pulled
+from — read it, not this doc, for the exact CSS if the two ever drift.
+
+**Status (2026-09): APPROVED, single direction.** `design/preview.html` went through one earlier
+round — a first preview Akash rejected — then a full rebuild, which he approved. The three
+candidate palettes this doc originally listed in §3 (never shipped anywhere) are gone; §3 now
+documents the one system that was actually picked: **"Porcelain" (light, default) / "Espresso"
+(dark)**, a neumorphism + glass system (soft same-color-surface shadows for chrome, glass for
+overlays, flat/opaque for anything with real data on it — candles, tables, numbers). `nylab/
+label_validate.py`'s label-validation review page is the **first real (non-preview) surface**
+restyled to this system (2026-09-27) — surfaces A (replay trainer) and B (research report) in §1
+are still their own three separate palettes and are restyled later, one surface at a time, same
+rule: read `design/preview.html`'s current token values at restyle time, don't hand-copy this doc.
 
 ## 1. Surfaces audited
 
@@ -24,10 +36,17 @@ plus the new `negative` word Phase 5.7 will add. Descriptive vs tested sections 
 distinguished at all right now — section 3 (tested) and sections 5–9 (descriptive, `DESIGN_BANNER`
 text only) look identical.
 
-**C. Label-validation review page** (`nylab/label_validate.py`'s `_HTML_TEMPLATE`). Dark-only, its own
-third palette (gold `#e8c77a` accent — different from both A and B), single fixed-width column,
-already has zoom buttons, a glossary `<details>`, and Agree/Disagree buttons (`.ans`, `.sel-agree`,
-`.sel-disagree`) that must keep their exact class names — `render_html()`'s JS reads them.
+**C. Label-validation review page** (`nylab/label_validate.py`'s `_HTML_TEMPLATE`). **Restyled
+2026-09-27** to the approved Porcelain/Espresso system (§3) — light default, dark toggle via the
+same `localStorage`-backed pattern as `design/preview.html`, `elev-raised`/`elev-inset` shadow pairs
+on the header/day cards/zoom buttons/Agree-Disagree buttons/bottom bar/note inputs, bull/bear candle
+colors from `--bull`/`--bear` instead of the old gold accent. Single fixed-width column, zoom
+buttons, glossary `<details>`, and Agree/Disagree buttons (`.ans`, `.sel-agree`, `.sel-disagree`)
+kept their exact class names throughout the restyle — `render_html()`'s JS and `label_validate.
+score()` both still read them. Two functional additions landed in the same round (ROADMAP 5.6,
+curated near-threshold sampling): the per-row numeric feature values (range_rel/er/close_loc, or the
+day-level equivalent) shown as muted text under each label, and dashed PDH/PDL reference lines drawn
+on the full-day chart for day_type calls.
 
 **D. Ahead-only previews** (Phase 6/8, not built yet): stats tab, challenge mode, review-mode overlay,
 news markers with a reveal state, spoiler icons, advanced DSL filter, trade gallery, "open in replay"
@@ -46,35 +65,48 @@ deep link, Maven pass-simulator result screen. These get mocked in `preview.html
 .sel-disagree .zoombtn .active .lbl #bar #progress` and the `downloadAnswers` function name. Any
 rename happens in the same commit as every reference, tests still green.
 
-## 3. Three palette directions (final pick happens in `design/preview.html`)
+## 3. The approved system — "Porcelain" (light, default) / "Espresso" (dark)
 
-All three share the same semantic-token *names* — only the values differ. None reuse NOVA's
-grey-blue. All keep bull/bear green/red untouched by the accent choice (accent never doubles as a
-P&L color).
+Neumorphism + glass: chrome (header, cards, buttons, inputs) uses same-color surfaces with a paired
+light/dark box-shadow to read as raised or inset relief, never a hard border; overlays (sheets,
+drawers) get `backdrop-filter` glass; the chart canvas and every data table stay flat/opaque, 100%
+contrast, never blurred or tinted. Values below are the real tokens from `design/preview.html`
+(`:root` = Porcelain, `:root[data-theme="dark"]` = Espresso, with a `prefers-color-scheme` media
+block mirroring Espresso for a first visit with no stored preference) — copy from there if this ever
+goes stale, not from this table.
 
-**Direction 1 — "Deep Slate"** (cool, neutral, terminal-desk feel):
-dark bg `#0B0D10` / panel `#14171C` / border `#262B33` / text `#E6E9ED` / muted `#8A93A0` /
-accent `#3DA9FC`. light bg `#F7F8FA` / panel `#FFFFFF` / border `#DFE3E8` / text `#10141A` /
-muted `#6B7280`.
+**Porcelain (light, default):** base `#F0EDE8` / shadow-dark `rgba(163,150,133,.45)` / shadow-light
+`#FFFFFF` / text-1 `#2B2822` / text-2 `#6B6459` / text-3 `#968F82` / accent `#0EA5A0` / amber
+`#E39B2F` / bull `#0F9D76` / bear `#E5484D` / glass-fill `rgba(240,237,232,.55)` / glass-border
+`rgba(255,255,255,.6)`.
 
-**Direction 2 — "Warm Ink"** (warm charcoal, amber/gold accent — closest to the existing gold already
-used in the report and label-validate page, so picking this is the smallest visual jump):
-dark bg `#12100D` / panel `#1B1815` / border `#2E2A24` / text `#ECE7DE` / muted `#9C9284` /
-accent `#D9A441`. light bg `#FAF7F2` / panel `#FFFFFF` / border `#E6DFD2` / text `#201B12`.
+**Espresso (dark):** base `#1E1B18` / shadow-dark `#12100E` / shadow-light `rgba(255,255,255,.045)`
+/ text-1 `#EFE9E1` / text-2 `#A79E92` / text-3 `#746B60` / accent `#2DD4BF` / amber `#F5B04C` / bull
+`#22C39A` / bear `#FF6369` / glass-fill `rgba(30,27,24,.45)` / glass-border `rgba(255,255,255,.09)`.
 
-**Direction 3 — "Graphite Violet"** (cool graphite, restrained violet accent, most distinct from
-anything already in the codebase):
-dark bg `#0E0E13` / panel `#17161E` / border `#2A2833` / text `#E7E5EE` / muted `#8D8A9C` /
-accent `#8C7CF0`. light bg `#F6F5FA` / panel `#FFFFFF` / border `#E1DFEA` / text `#17151F`.
+Bull/bear stay each theme's own green/red (never doubled as the accent color, never reused for
+anything but P&L/candle direction). `--profit`/`--loss` = same as bull/bear. Amber is the shared
+warn/impact color (`--warn`, news-impact medium, the "Warm Ink" gold this system replaces
+everywhere it appeared). `--breach` = bear at full saturation + a diagonal-hatch pattern (never
+colour alone). Session colors (subtle fills, never hide a wick): reuse the theme's own accent/amber/
+bull/bear at low opacity (~6-8%) per session rather than a fixed hex list, so they stay in sync with
+whichever theme is active — label-validate's session shading already does this (`--amber-rgb` at
+.07/.35 alpha).
 
-Shared semantic tokens (all directions): `--bull #1FAE7A` (filled) / `--bear #E24B63` (hollow —
-survives deuteranopia/protanopia by shape, not just hue; a colour-blind-safe candle mode swaps
-fill/hollow for a blue/orange pair), `--profit`/`--loss` = same as bull/bear, `--warn #D9A441`,
-`--breach #E24B63` at full saturation + a diagonal-hatch pattern (never colour alone), `--pending
-#7C8CA6`, `--sl #E24B63`, `--tp #1FAE7A`, `--be #7C8CA6`, news impact low/med/high = muted → warn →
-breach. Session colors (subtle fills, never hide a wick): Asia `#8C7CF0`@8%, London `#3DA9FC`@8%,
-NY AM `#1FAE7A`@8%, Lunch `#7C8CA6`@8%, NY PM `#E88A3D`@8%, Silver Bullet windows (all three) `#D9A441`
-point-markers, not fills (too narrow to shade without hiding bars).
+**Elevation classes** (from `design/preview.html`, reused verbatim by every restyled surface):
+`.elev-flat` (background only, no shadow), `.elev-raised` (`8px 8px 18px var(--shadow-dark), -8px
+-8px 18px var(--shadow-light)`), `.elev-raised-soft` (same pattern, half the offset/blur — smaller
+components), `.elev-inset` (the same shadow pair, `inset`), `.press:active` (inset shadow + `scale
+(0.98)`, ~80ms linear — the tactile "pressed" state for any clickable raised/soft element). Radii:
+`--radius-card: 18px`, `--radius-pill: 999px` (buttons/chips/badges), `--radius-island: 26px` (top-
+level panels). Motion: `--ease-glide: cubic-bezier(0.22, 1, 0.36, 1)`, `--t-fast: 140ms`, `--t-med:
+320ms` — background/color/box-shadow transitions only, `prefers-reduced-motion` respected.
+
+**Theme toggle:** a small circular sun/moon icon button (`#themeBtn`/`#themeIcon` in preview.html,
+adapted per-surface), `localStorage` key `eurusd-theme` (`'light'`/`'dark'`, wrapped in try/catch so
+a private window or blocked storage degrades to system preference instead of throwing), read once on
+load via `data-theme` on `<html>`; `prefers-color-scheme` only decides the very first visit, before
+anything is stored.
 
 ## 4. Type
 
@@ -86,10 +118,12 @@ decimal, every time value carries a literal "NY" suffix or column header — nev
 
 ## 5. Spacing, radii, elevation
 
-Spacing scale: 4 / 8 / 12 / 16 / 24 / 32px. Radii: 6px (buttons/inputs), 10px (cards/panels), 16px
-(sheets/modals). Elevation is glass+shadow, chrome only: panels get a 1px border + very subtle
-`backdrop-filter: blur()` and a soft shadow; the chart canvas and every data table stay flat/opaque,
-100% contrast, never blurred or tinted — a candle wick must never sit under glass.
+Spacing scale: 4 / 8 / 12 / 16 / 24 / 32px. Radii and elevation are the approved system's own (§3:
+`--radius-card`/`--radius-pill`/`--radius-island`, `.elev-raised`/`.elev-raised-soft`/`.elev-inset`)
+— this section previously listed its own placeholder numbers (6/10/16px, plain border+blur) written
+before a direction was picked; superseded by §3, kept only as a pointer so nothing here contradicts
+it. The chart canvas and every data table stay flat/opaque, 100% contrast, never blurred or tinted —
+a candle wick must never sit under glass.
 
 ## 6. Components (shared vocabulary across all 3 surfaces)
 
