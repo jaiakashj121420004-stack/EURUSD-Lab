@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EURUSD Lab -- Design Preview (pick a direction)</title>
+<style>
+/* ============ TOKENS: 3 palette directions, swapped via data-dir on <html> ============ */
+:root{
+  --radius-sm:6px; --radius-md:10px; --radius-lg:16px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px;
+  --bull:#1FAE7A; --bear:#E24B63; --warn:#D9A441; --breach:#E24B63; --pending:#7C8CA6;
+  --font-ui: -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-num: "Consolas", "SFMono-Regular", Menlo, monospace;
+  --ease: cubic-bezier(0.22,1,0.36,1);
+}
+html[data-dir="slate"][data-theme="dark"]{ --bg:#0B0D10; --panel:#14171C; --border:#262B33; --text:#E6E9ED; --muted:#8A93A0; --accent:#3DA9FC; }
+html[data-dir="slate"][data-theme="light"]{ --bg:#F7F8FA; --panel:#FFFFFF; --border:#DFE3E8; --text:#10141A; --muted:#6B7280; --accent:#3DA9FC; }
+html[data-dir="ink"][data-theme="dark"]{ --bg:#12100D; --panel:#1B1815; --border:#2E2A24; --text:#ECE7DE; --muted:#9C9284; --accent:#D9A441; }
+html[data-dir="ink"][data-theme="light"]{ --bg:#FAF7F2; --panel:#FFFFFF; --border:#E6DFD2; --text:#201B12; --muted:#7A7263; --accent:#B8862F; }
+html[data-dir="violet"][data-theme="dark"]{ --bg:#0E0E13; --panel:#17161E; --border:#2A2833; --text:#E7E5EE; --muted:#8D8A9C; --accent:#8C7CF0; }
+html[data-dir="violet"][data-theme="light"]{ --bg:#F6F5FA; --panel:#FFFFFF; --border:#E1DFEA; --text:#17151F; --muted:#69667A; --accent:#7A67E0; }
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:14px;line-height:1.5;transition:background .3s var(--ease),color .3s var(--ease)}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0 0 8px;font-weight:600}
+.muted{color:var(--muted);font-size:12px}
+.controls{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--border);padding:var(--sp-3) var(--sp-4);display:flex;gap:var(--sp-4);flex-wrap:wrap;align-items:center;backdrop-filter:blur(12px)}
+.controls label{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
+select,button.ctl{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font-family:var(--font-ui);cursor:pointer}
+.section{max-width:1400px;margin:var(--sp-6) auto;padding:0 var(--sp-4)}
+.section h2{border-bottom:1px solid var(--border);padding-bottom:8px;font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.note{font-size:12px;color:var(--muted);margin-top:4px}
+
+/* glass card -- chrome only, never over the chart canvas */
+.card{background:color-mix(in srgb, var(--panel) 88%, transparent);border:1px solid var(--border);border-radius:var(--radius-md);padding:var(--sp-4);box-shadow:0 8px 24px rgba(0,0,0,.18);backdrop-filter:blur(14px)}
+
+/* ---- badges ---- */
+.badges{display:flex;flex-wrap:wrap;gap:var(--sp-3)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--border)}
+.badge svg{width:12px;height:12px}
+.badge.noise{color:var(--muted);background:color-mix(in srgb, var(--muted) 12%, transparent)}
+.badge.notproven{color:var(--warn);background:color-mix(in srgb, var(--warn) 14%, transparent)}
+.badge.promising{color:var(--accent);background:color-mix(in srgb, var(--accent) 14%, transparent)}
+.badge.candidate{color:var(--accent);background:color-mix(in srgb, var(--accent) 20%, transparent);border-color:var(--accent)}
+.badge.survivesoos{color:#fff;background:var(--bull);border-color:var(--bull)}
+.badge.negative{color:#fff;background:var(--breach);border-color:var(--breach)}
+
+/* ---- limit meters ---- */
+.meter-row{display:flex;flex-direction:column;gap:6px;margin-bottom:var(--sp-4)}
+.meter-track{height:10px;border-radius:6px;background:color-mix(in srgb, var(--border) 60%, transparent);overflow:hidden;position:relative}
+.meter-fill{height:100%;border-radius:6px;transition:width .3s var(--ease)}
+.meter-fill.calm{background:var(--bull)}
+.meter-fill.amber{background:var(--warn)}
+.meter-fill.red{background:var(--breach)}
+.meter-fill.breach{background:repeating-linear-gradient(45deg, var(--breach), var(--breach) 6px, #7a1f2c 6px, #7a1f2c 12px)}
+.meter-label{display:flex;justify-content:space-between;font-size:12px}
+
+/* ---- verdict / section distinction ---- */
+.tested{border-left:4px solid var(--accent)}
+.descriptive{border-left:4px dashed var(--muted)}
+.tag{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+
+/* ---- device frames ---- */
+.frameWrap{display:flex;justify-content:center;overflow-x:auto;padding:var(--sp-4) 0}
+.frame{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--bg);box-shadow:0 20px 60px rgba(0,0,0,.25);transition:width .3s var(--ease), height .3s var(--ease)}
+.frame.phone{width:390px;height:780px}
+.frame.foldable-cover{width:300px;height:640px}
+.frame.foldable-open{width:700px;height:560px}
+.frame.tablet{width:820px;height:600px}
+.frame.desktop{width:1200px;height:640px}
+.frame.ultrawide{width:1400px;height:560px}
+
+/* ---- mini replay-trainer mock inside the frame ---- */
+.rt{display:flex;flex-direction:column;height:100%;font-size:12px}
+.rt-top{display:flex;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--panel)}
+.rt-body{flex:1;display:flex;min-height:0}
+.rt-nav{width:190px;border-right:1px solid var(--border);padding:8px;overflow:auto;background:var(--panel)}
+.rt-chart{flex:1;background:var(--bg);position:relative;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.rt-acct{width:170px;border-left:1px solid var(--border);padding:8px;overflow:auto;background:var(--panel)}
+.rt-sheet{position:absolute;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--border);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:10px;box-shadow:0 -10px 30px rgba(0,0,0,.25)}
+.rt-tabs{display:flex;gap:6px;padding:6px 8px;border-top:1px solid var(--border);background:var(--panel)}
+.rt-tabs .tab{flex:1;text-align:center;padding:8px 4px;border-radius:var(--radius-sm);color:var(--muted)}
+.rt-tabs .tab.active{color:var(--accent);background:color-mix(in srgb, var(--accent) 12%, transparent)}
+.sess{position:absolute;top:0;bottom:0;opacity:1}
+.candleRow{display:flex;align-items:flex-end;gap:2px;height:70%}
+.candle{width:5px;border-radius:1px}
+.candle.up{background:var(--bull)}
+.candle.down{background:transparent;border:1px solid var(--bear)}
+
+/* ---- report excerpt mock ---- */
+.report-page{max-width:820px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-md);padding:24px}
+.report-page h1{font-size:20px}
+.report-page table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+.report-page th{background:color-mix(in srgb, var(--accent) 16%, var(--panel));text-align:left;padding:6px;font-weight:600}
+.report-page td{padding:5px 6px;border-bottom:1px solid var(--border)}
+.report-page tr:nth-child(even) td{background:color-mix(in srgb, var(--border) 30%, transparent)}
+
+/* ---- toast / info icon ---- */
+.infoIcon{display:inline-flex;width:14px;height:14px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);align-items:center;justify-content:center;font-size:10px;cursor:help}
+.toast{display:inline-flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <label>Palette
+    <select id="dirSel">
+      <option value="slate">1 -- Deep Slate (cool/blue)</option>
+      <option value="ink">2 -- Warm Ink (amber/gold)</option>
+      <option value="violet">3 -- Graphite Violet</option>
+    </select>
+  </label>
+  <label>Theme
+    <select id="themeSel">
+      <option value="dark">Dark</option>
+      <option value="light">Light</option>
+    </select>
+  </label>
+  <label>Frame
+    <select id="frameSel">
+      <option value="phone">Phone 390</option>
+      <option value="foldable-cover">Foldable cover ~300</option>
+      <option value="foldable-open">Foldable open ~700</option>
+      <option value="tablet">Tablet 820</option>
+      <option value="desktop">Desktop 1200</option>
+      <option value="ultrawide">Ultrawide 1400</option>
+    </select>
+  </label>
+  <span class="muted">This file has no build step and makes zero network requests -- open it anywhere, offline. Nothing here is the real app; every number and screen below is fake.</span>
+</div>
+
+<div class="section">
+  <h2>Replay trainer -- responsive frame preview</h2>
+  <div class="frameWrap"><div class="frame phone" id="frame"><div class="rt" id="rtInner"></div></div></div>
+  <p class="note">Toggle "Frame" above. &lt;600px collapses nav/account into a bottom sheet with tabs; 1024-1439 keeps one side column and drawers the other; &ge;1440 shows all three columns.</p>
+</div>
+
+<div class="section">
+  <h2>Verdict badges (6 words -- only survives-oos is celebratory)</h2>
+  <div class="badges">
+    <span class="badge noise">&#9679; noise</span>
+    <span class="badge notproven">&#9679; not proven</span>
+    <span class="badge promising">&#9679; promising</span>
+    <span class="badge candidate">&#9679; candidate</span>
+    <span class="badge survivesoos">&#10003; survives-oos</span>
+    <span class="badge negative">&#9650; negative</span>
+  </div>
+  <p class="note">"promising" is deliberately styled closer to "noise" than to "survives-oos" -- it must never read as a win.</p>
+</div>
+
+<div class="section">
+  <h2>Descriptive vs tested sections (never colour alone)</h2>
+  <div class="card tested" style="margin-bottom:10px"><span class="tag">TESTED -- significance checked</span><h3>3 &middot; Hypothesis results</h3><p class="muted">Solid accent border + "TESTED" tag.</p></div>
+  <div class="card descriptive"><span class="tag">DESCRIPTIVE -- plain counts, not tested</span><h3>6 &middot; Cross-session transitions</h3><p class="muted">Dashed muted border + "DESCRIPTIVE" tag -- same shape, unmistakably different at a glance.</p></div>
+</div>
+
+<div class="section">
+  <h2>Maven account limit meters -- calm &rarr; amber 50% &rarr; red 75% &rarr; breach</h2>
+  <div class="card">
+    <div class="meter-row"><div class="meter-label"><span>Daily loss</span><span class="num muted">1.1% / 4%</span></div><div class="meter-track"><div class="meter-fill calm" style="width:27%"></div></div></div>
+    <div class="meter-row"><div class="meter-label"><span>Daily loss</span><span class="num muted">2.1% / 4%</span></div><div class="meter-track"><div class="meter-fill amber" style="width:52%"></div></div></div>
+    <div class="meter-row"><div class="meter-label"><span>Daily loss</span><span class="num muted">3.1% / 4%</span></div><div class="meter-track"><div class="meter-fill red" style="width:78%"></div></div></div>
+    <div class="meter-row"><div class="meter-label"><span>Daily loss &mdash; BREACHED <span class="infoIcon">i</span></span><span class="num" style="color:var(--breach)">4.3% / 4%</span></div><div class="meter-track"><div class="meter-fill breach" style="width:100%"></div></div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Blind mode / spoiler state</h2>
+  <div class="card" style="display:flex;gap:16px;align-items:center">
+    <div class="badge noise" style="opacity:.6">&#128065;&#65039;&#8203; hidden</div>
+    <span class="muted">Masked axis label + eye-off icon shown on the chart and on any spoiler day-table row -- never just a blank space, so it reads as "hidden on purpose," not "broken."</span>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Research report excerpt (light/dark both readable, charts too)</h2>
+  <div class="report-page">
+    <h1>EURUSD New York Session Lab</h1>
+    <p class="muted">EURUSD_M5_sample.csv &middot; 2021-09-27 &rarr; 2026-09-25 &middot; 1,295 trading days</p>
+    <div class="card tested" style="margin:10px 0"><span class="tag">TESTED</span> H016 &middot; London chop &rarr; NY AM range <span class="badge candidate" style="margin-left:6px">candidate</span></div>
+    <table><tr><th>Session</th><th>Window (NY)</th><th>Median range</th><th>Character</th></tr>
+    <tr><td>Asia</td><td class="num">20:00-00:00</td><td class="num">31.2 pips</td><td>chop 49%</td></tr>
+    <tr><td>London KZ</td><td class="num">02:00-05:00</td><td class="num">28.7 pips</td><td>normal 33%</td></tr>
+    <tr><td>NY AM KZ</td><td class="num">07:00-10:00</td><td class="num">41.8 pips</td><td>trend 21%</td></tr></table>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Ahead-only previews (Phase 6/8 -- design only, not built)</h2>
+  <div style="display:flex;gap:16px;flex-wrap:wrap">
+    <div class="card" style="width:260px"><span class="tag">Phase 6</span><h3>News marker</h3><p class="muted">Grey pin pre-release &rarr; fills warn/breach colour the instant "actual" is revealed at release time, never before.</p></div>
+    <div class="card" style="width:260px"><span class="tag">Phase 6</span><h3>Challenge mode</h3><p class="muted">A sequence of filtered days under Maven rules, progress dots along the top, breach ends the run with the same breach styling as the account panel.</p></div>
+    <div class="card" style="width:260px"><span class="tag">Phase 8</span><h3>Trade gallery</h3><p class="muted">Snapshot grid, "open in replay" pill link on hover/tap, verdict badge per trade's model.</p></div>
+  </div>
+</div>
+
+<script>
+const dirSel = document.getElementById('dirSel'), themeSel = document.getElementById('themeSel'), frameSel = document.getElementById('frameSel');
+function apply(){
+  document.documentElement.setAttribute('data-dir', dirSel.value);
+  document.documentElement.setAttribute('data-theme', themeSel.value);
+  document.getElementById('frame').className = 'frame ' + frameSel.value;
+  buildRT(frameSel.value);
+}
+dirSel.onchange = apply; themeSel.onchange = apply; frameSel.onchange = apply;
+
+function fakeCandles(n){
+  let h = '<div class="candleRow">';
+  for(let i=0;i<n;i++){
+    const up = Math.random() > 0.45;
+    const height = 20 + Math.random()*60;
+    h += `<div class="candle ${up?'up':'down'}" style="height:${height}%"></div>`;
+  }
+  return h + '</div>';
+}
+
+function buildRT(frame){
+  const wide = frame === 'desktop' || frame === 'ultrawide' || frame === 'tablet' || frame === 'foldable-open';
+  const el = document.getElementById('rtInner');
+  const top = `<div class="rt-top"><span class="num">2024-06-14</span><span class="muted">&#9664; prev</span><span class="muted">next &#9654;</span><span style="flex:1"></span><span class="badge promising" style="padding:2px 8px">promising</span></div>`;
+  const chart = `<div class="rt-chart">${fakeCandles(28)}<div style="position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;color:var(--muted);font-size:11px;padding-bottom:4px">NY AM killzone highlighted (session colour, 8% fill, never over wicks)</div></div>`;
+  if(wide){
+    const nav = `<div class="rt-nav"><h3 style="font-size:12px">Filters</h3><p class="muted">London high raided in NY</p><table style="width:100%;font-size:11px"><tr><td class="num">06-14</td><td>trend</td></tr><tr><td class="num">06-13</td><td>chop</td></tr></table></div>`;
+    const acct = `<div class="rt-acct"><h3 style="font-size:12px">Maven account</h3>
+      <div class="meter-row"><div class="meter-label"><span>Daily</span><span class="num">1.8%/4%</span></div><div class="meter-track"><div class="meter-fill calm" style="width:45%"></div></div></div>
+      <div class="meter-row"><div class="meter-label"><span>Overall</span><span class="num">3.1%/8%</span></div><div class="meter-track"><div class="meter-fill amber" style="width:52%"></div></div></div>
+      <button class="ctl" style="width:100%;margin-top:6px">Place order</button></div>`;
+    el.innerHTML = top + `<div class="rt-body">${nav}${chart}${acct}</div>` +
+      `<div class="rt-tabs" style="display:none"></div>`;
+  } else {
+    el.innerHTML = top + `<div class="rt-body">${chart}</div>` +
+      `<div class="rt-sheet"><div class="meter-row"><div class="meter-label"><span>Daily</span><span class="num">1.8%/4%</span></div><div class="meter-track"><div class="meter-fill calm" style="width:45%"></div></div></div>
+      <button class="ctl" style="width:100%">Place order</button></div>` +
+      `<div class="rt-tabs"><div class="tab active">Chart</div><div class="tab">Filters</div><div class="tab">Account</div><div class="tab">Journal</div></div>`;
+  }
+}
+apply();
+</script>
+</body>
+</html>
