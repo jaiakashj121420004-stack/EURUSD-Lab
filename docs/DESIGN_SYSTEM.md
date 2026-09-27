@@ -83,9 +83,15 @@ curated near-threshold sampling): the per-row numeric feature values (range_rel/
 day-level equivalent) shown as muted text under each label, and dashed PDH/PDL reference lines drawn
 on the full-day chart for day_type calls.
 
-**D. Ahead-only previews** (Phase 6/8, not built yet): stats tab, challenge mode, review-mode overlay,
-news markers with a reveal state, spoiler icons, advanced DSL filter, trade gallery, "open in replay"
-deep link, Maven pass-simulator result screen. These get mocked in `preview.html` with fake data only.
+**D. Built 2026-09-27 (Phase 6, ROADMAP 6.1-6.7)**: stats tab, challenge mode, review-mode
+overlay, news markers with a reveal state, spoiler icons/badge, advanced DSL filter, session-
+character/news/raid/ADR filters, and preset save/load/delete are all real, working features in
+`static/index.html`/`app.js`/`style.css` now -- not mockups. They followed the existing
+Porcelain/Espresso token system rather than introducing new colors; no new commit is needed for
+their visual language, only the frozen-hooks list update in section 2 below.
+
+**Still ahead-only previews** (not built yet): trade gallery, "open in replay" deep link, Maven
+pass-simulator result screen. These remain mocked in `preview.html` with fake data only.
 
 ## 2. IDs / hooks that must survive untouched (grepped from `app.js` and tests)
 
@@ -97,7 +103,17 @@ deep link, Maven pass-simulator result screen. These get mocked in `preview.html
 #rulesFollowed #emotion #notes #saveJournalBtn #datePicker #prevDay #nextDay #randomDay #startAt #tf
 #blindMode #darkToggle #matchCount`, plus classes `.dayRow .active .spoiler .sessionBox
 .dragging-line .badge.green/.amber/.red .muted .footnote`. Label-validate's `.ans .sel-agree
-.sel-disagree .zoombtn .active .lbl #bar #progress` and the `downloadAnswers` function name. Any
+.sel-disagree .zoombtn .active .lbl #bar #progress` and the `downloadAnswers` function name.
+
+**Added 2026-09-27 (responsive drawer pass)**: `#overlayDim #navToggle #acctToggle #sheetTabs
+#tabDays #tabAccount #layout`, plus classes `.drawerBtn .sheetActive`.
+
+**Added 2026-09-27 (Phase 6, ROADMAP 6.1-6.7)**: `#statsToggle #statsPanel #statsBody #statsClose
+#challengeBanner #challengeStatus #challengeNextDay #challengeStop #startChallenge #deletePreset
+#fHideOutcome #fAdrMin #fAdrMax #fDsl #fDslApply #fDslError #spoilerBadge #newsStrip #reviewBtn
+#reviewPanel`, plus classes `.filterGroup .charFilterRow .charSelect .fNews .fRaid .newsChip
+.pending .surprise-up .surprise-down .iconBtn`. `.charSelect` carries `data-sid="lon"/"asia"/
+"nyam_kz"` (not an id -- don't mistake it for a frozen id when grepping). Any
 rename happens in the same commit as every reference, tests still green.
 
 ## 3. The approved system — "Porcelain" (light, default) / "Espresso" (dark)
