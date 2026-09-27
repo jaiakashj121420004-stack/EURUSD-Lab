@@ -162,8 +162,31 @@ The machinery must make these mistakes impossible, not just fixed once.
       `r0930_1600_rel` outcome columns added to `nylab/days.py::build_days()` for exactly the
       9.5-decision case this was built for. H013 bumped to v1.1 (see 5.7.4 note below) since the
       new check would otherwise refuse to load the still-installed v1.0 file.
-- [ ] 5.7.3 Engine: p from **IS only**; two-proportion test condition vs complement; true Wilson CI;
+- [x] 5.7.3 Engine: p from **IS only**; two-proportion test condition vs complement; true Wilson CI;
       5-td embargo between IS and OOS; `direction` field (as_claimed / opposite); effect in pips.
+      Done 2026-09-27: `nylab/stats.py::wilson_ci()` rewritten from a mislabeled Wald interval to
+      the true Wilson score interval (no golden test pinned its old numbers, confirmed safe);
+      new `two_proportion_ztest()` (pooled-proportion, condition-true vs its own complement, per
+      RESEARCH_PROTOCOL.md S2's 2026-09-26 clarification) added alongside the frozen, untouched
+      `ztest()` (still used verbatim by v0's `nylab/hypotheses.py`, and by the new engine too, but
+      now only for a hypothesis with an explicit literal `baseline_p0` like H015's coin-flip).
+      `nylab/hyp_engine.py::evaluate()` rewritten: `z`/`p`/`ci_lo`/`ci_hi` now come from IS-only
+      condition-true vs IS-only complement counts (not the old full-sample one-proportion test);
+      new `EMBARGO_TD = 5` and `_split_masks()` exclude 5 trading days at the split boundary from
+      BOTH the IS and OOS masks; new `direction` field (`as_claimed`/`opposite`, comparing IS hit
+      rate to baseline); new `PIP_UNIT_COLUMNS` allow-list + `_effect_col()` report the effect in
+      pips (median of the detected column, IS/OOS x condition/complement) for genuinely
+      pip-denominated outcomes only (excludes signs like `ny_drive` and raw prices like
+      `ny_close`/`lon_high`). `n`/`hit`/`is_hit`/`oos_hit`/`oos_n` (the other descriptive stats)
+      deliberately left untouched. Golden-parity test (`tests/test_nylab_phase1.py`) now excludes
+      `baseline` (its meaning changed engine-wide) and `oos_hit`/`oos_n` (the embargo shifts which
+      days count as OOS for every hypothesis) from the strict v0 comparison, keeping only
+      `n`/`hit`/`is_hit` -- confirmed via the actual suite run that those three still match v0
+      exactly for every hypothesis whose condition/outcome text is unchanged. AT-01/AT-02 re-run
+      after the rewrite: 3/3 pass, H005's planted edge still reaches `survives-oos` with the new
+      IS-only two-proportion test -- the ROADMAP's flagged fixture-strengthening risk did not
+      materialize. New `tests/test_stats.py` and `tests/test_hyp_engine.py` added; full suite
+      (171 tests) green.
 - [~] 5.7.4 Re-issue H013/H014 as **v1.1** with prior-only thresholds, post-09:30 outcomes and
       correctly-directed titles (m += 2). H015 re-labelled *descriptive* (decision 16:00 = outcome time,
       nothing left to predict). Expected result from the 2026-09-26 check: both noise. Partly done:

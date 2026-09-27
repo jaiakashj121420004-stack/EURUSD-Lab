@@ -83,7 +83,18 @@ def test_hypotheses_csv_matches_golden(nylab_run):
     design flags a different, smaller set of days than v0's condition did. H014 (row index 13,
     the 14th of the 15 ported hypotheses) is excluded from the strict parity check for that
     reason; every other v0-ported hypothesis (unchanged condition/outcome) must still match
-    exactly."""
+    exactly.
+
+    ROADMAP 5.7.3 (2026-09-27): `baseline` is dropped from this check ENTIRELY, for every row,
+    not just H013/H014 -- its very MEANING changed for the whole engine (RESEARCH_PROTOCOL.md
+    S2's 2026-09-26 clarification): v0 (and Phase 3 before this ticket) computed it as the
+    outcome's marginal rate over ALL days, condition-true days included, which dilutes the
+    contrast being tested; it's now the condition's own COMPLEMENT rate (days where the
+    condition is false), IS-only. `oos_hit`/`oos_n` are ALSO dropped, for the same reason but a
+    different mechanism: 5.7.3 adds a 5-trading-day IS/OOS embargo (nylab.hyp_engine._split_masks),
+    which shifts which calendar days count as OOS for every hypothesis. Only `n`/`hit`/`is_hit`
+    (condition-true counts and the IS-only hit rate, untouched by either change) still match v0
+    exactly for H001-H012/H015/H016, whose condition/outcome text is otherwise unchanged."""
     gold = pd.read_csv(GOLDEN / "hypotheses.csv")
     new = pd.read_csv(nylab_run / "hypotheses.csv")
     assert len(gold) == 15
@@ -96,10 +107,18 @@ def test_hypotheses_csv_matches_golden(nylab_run):
     # from `ny_range` to the new post-decision `r0930_1600` column (v0's outcome window started
     # before its own decision_time_h=9.5, RESEARCH_PROTOCOL.md S3). H013's condition is
     # unchanged, so its `n`/`oos_n` (which depend only on condition) still match v0 exactly --
-    # only the outcome-dependent columns (hit, baseline, is_hit, oos_hit) actually move; excluded
+    # only the outcome-dependent columns (hit, is_hit, oos_hit) actually move; excluded
     # wholesale here anyway for the same reason as H014, rather than tracking that distinction.
     h013_row = ported.index[ported["id"] == "H013"][0]
-    for col in ("n", "hit", "baseline", "is_hit", "oos_hit", "oos_n"):
+    # ROADMAP 5.7.3 (2026-09-27): "oos_hit"/"oos_n" are ALSO dropped from this check, for every
+    # row -- the OOS window's own definition changed engine-wide (nylab.hyp_engine._split_masks):
+    # v0 (and Phase 3) took OOS as everything from split_date onward; 5.7.3 adds a 5-trading-day
+    # embargo, excluding split_date and the next few trading days from BOTH the IS and OOS masks,
+    # so no day sits close enough to the split to leak between the two samples. That shifts which
+    # calendar days count as OOS for every hypothesis (confirmed by running the suite: oos_n moves
+    # by a handful of days for H001-H012/H015, not just H013/H014), which is the entire point of
+    # the embargo, so it isn't a regression to compare away.
+    for col in ("n", "hit", "is_hit"):  # "baseline"/"oos_hit"/"oos_n" excluded, see docstrings
         diff = (gold[col].astype(float) - ported[col].astype(float)).abs()
         ok = (diff <= 1e-9) | (gold[col].isna() & ported[col].isna())
         ok.loc[h014_row] = True  # H014 v1.1's prior-only condition intentionally changes n/hit

@@ -3,7 +3,7 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 5.7 (statistics integrity) in progress -- 5.7.1 and 5.7.2 done (prior-only DSL thresholds; starts_at_h + post-decision outcome column), 5.7.3/5.7.5/5.7.6 queued, 5.7.4 partly done. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR).
+## Status: Phase 5.7 (statistics integrity) in progress -- 5.7.1, 5.7.2 and 5.7.3 done (prior-only DSL thresholds; starts_at_h + post-decision outcome column; IS-only p/complement baseline/embargo/direction/effect-in-pips engine rewrite), 5.7.5/5.7.6 queued, 5.7.4 partly done. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR).
 
 Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
 call: keep building through the phases on the automated tests alone, and he'll sit down and look
@@ -965,3 +965,70 @@ exactly decision_time_h, the already-resolved-reference exemption, H013 v1.1 loa
 and `tests/test_nylab_phase1.py` (`r0930_1600` checked against a hand-computed range from raw
 bars, an AT-03-style truncation-safety check, and that `COLUMN_STARTS_AT_H`/`COLUMN_DOCS` are
 registered correctly). Full suite 155/155.
+
+## 2026-09-27 — Phase 5.7.3: engine rewrite -- IS-only p, complement baseline, embargo (3 of 6)
+
+**5.7.3 done.** This is the ticket RESEARCH_PROTOCOL.md S2's 2026-09-26 clarification was written
+for: v0's significance test compared a condition's hit rate against an ALL-DAYS baseline that
+included the condition-true days themselves (diluting the very contrast being tested), and its
+OOS window began exactly at the IS/OOS split date with no separation from IS at all.
+
+**`nylab/stats.py`:** `wilson_ci()` was, despite its name, a Wald interval (`p +/- z*sqrt(p(1-p)/n)`)
+-- badly under-covering for small n or p near 0/1, exactly where a hypothesis's IS-only
+condition-true count tends to sit. Rewritten to the true Wilson score interval. Checked first
+that no golden test pinned the old formula's exact numbers (it didn't -- `tests/test_nylab_phase1.py`
+has never compared `ci_lo`/`ci_hi` against the v0 golden file), so this is a pure bugfix, not a
+behavior version bump requiring a compatibility shim. New `two_proportion_ztest(k1, n1, k2, n2)`:
+the pooled-proportion two-sample z-test RESEARCH_PROTOCOL.md asks for -- condition-true (group 1)
+vs its own complement, condition-false (group 2), both IS-only. `ztest()` (v0's one-proportion
+test against a literal fixed `p0`) is completely untouched -- `nylab/hypotheses.py` (frozen v0)
+still calls it verbatim, and the new engine keeps using it too, but now ONLY for a hypothesis
+with an explicit `baseline_p0` (H015's 50% coin-flip -- a deliberately literal theoretical null,
+not an empirically-measured rate, so it stays a one-proportion test against that literal value).
+
+**`nylab/hyp_engine.py::evaluate()` rewritten:** `n1,k1` = IS condition-true; `n2,k2` = IS
+complement; `z,p = two_proportion_ztest(k1,n1,k2,n2)` (or `ztest(k1,n1,baseline_p0)` when a
+literal `baseline_p0` is set); `ci_lo,ci_hi = wilson_ci(k1,n1)` (now describing the SAME IS-only
+estimate the test actually uses, not the old full-sample rate). New `EMBARGO_TD = 5` and
+`_split_masks(index, split_date)`: IS stays `index < split_date` (unchanged boundary -- no
+existing IS count moves), but OOS now starts 5 TRADING DAYS after split_date, not at split_date
+itself, with a fallback to split_date if there aren't 5 full days available. The embargoed days
+belong to neither mask. New `direction` field (`as_claimed` if IS hit rate >= baseline else
+`opposite`). New pips-denominated effect size: `PIP_UNIT_COLUMNS` is a deliberately conservative
+explicit allow-list (`day_range`, `asia_range`, `lon_range`, `ny_range`, `cbdr_range`,
+`r0930_1600`, `adr5`, `adr20`) rather than a generic numeric-dtype heuristic, specifically so a
+sign (`ny_drive`) or a raw price (`ny_close`, `lon_high`) never gets misreported as "pips";
+`_effect_col()` finds the first such column referenced in the outcome expression, and
+`effect_is_cond_pips`/`effect_is_complement_pips`/`effect_oos_cond_pips`/`effect_oos_complement_pips`
+report its median split by condition/complement and IS/OOS. `min_n` gating now checks `is_n`
+(the IS-only count the test actually uses) instead of the old full-sample `n`. `n`/`hit`/`is_hit`/
+`oos_hit`/`oos_n` (the other descriptive stats) were deliberately left untouched by this rewrite.
+
+**Golden-parity test consequence:** running the full suite after the rewrite showed `baseline`
+diverging from the v0 golden file for EVERY hypothesis, not just H013/H014 -- expected, since
+its meaning changed engine-wide (marginal-including-condition-days -> the condition's own
+complement rate). `oos_hit`/`oos_n` also diverged for nearly every hypothesis, by a handful of
+days each -- also expected: the 5-day embargo shifts which calendar days count as OOS at all,
+which is the entire point of adding it. `test_hypotheses_csv_matches_golden` now checks only
+`n`/`hit`/`is_hit` for strict v0 parity (with H013/H014 still excluded outright for their own
+5.7.1/5.7.2 reasons); confirmed those three still match exactly for every hypothesis whose
+condition/outcome text is otherwise unchanged.
+
+**AT-02 risk flagged in the ROADMAP did not materialize:** re-ran `tests/test_hyp_engine_at.py`
+after the rewrite and got 3/3 passed -- H005's planted edge still reaches `survives-oos` with the
+new IS-only two-proportion test, no fixture strengthening needed.
+
+**Verified:** new `tests/test_stats.py` (true Wilson CI vs the old Wald formula, symmetric-case
+known value, zero-n, bounds-in-[0,1]; two-proportion test's no-difference/large-difference/zero-n
+cases; a sanity cross-check against `ztest()`; confirms `ztest()` itself is unchanged) and new
+`tests/test_hyp_engine.py` (the embargo's boundary and its no-enough-days fallback on a synthetic
+20/12-day index; `_effect_col()`'s pip-column detection and its non-pip exclusions; `evaluate()`'s
+complement baseline + `direction` field, effect-in-pips reporting, and the `baseline_p0` literal
+override, all on a small synthetic day table with a deliberately perfect, unambiguous effect).
+Full suite 171/171.
+
+**Not yet done:** 5.7.4's remaining scope (re-running H013/H014 v1.1 against the real 5-year
+cache via `nylab run` now that the engine reports honestly, correctly-directed titles, H015
+re-labelled *descriptive*), 5.7.5 (new `negative` verdict word -- needs Akash's confirmation of
+the name per the ROADMAP's own note), 5.7.6 (AT-05 artifact-catching fixtures). `run_tests.bat`
+has not yet been verified on Akash's own laptop, only in this cloud-linked device session.
