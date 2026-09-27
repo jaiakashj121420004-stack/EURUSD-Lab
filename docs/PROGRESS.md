@@ -3,7 +3,7 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 5.7 (statistics integrity) in progress -- 5.7.1 through 5.7.5 done (prior-only DSL thresholds; starts_at_h + post-decision outcome column; IS-only p/complement baseline/embargo/direction/effect-in-pips engine rewrite; H013/H014 re-run + H015 relabelled descriptive; `negative` model verdict), 5.7.6 (AT-05 fixtures) queued -- the last item in the phase. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR).
+## Status: Phase 5.7 (statistics integrity) DONE, 5.7.1 through 5.7.6 -- prior-only DSL thresholds; starts_at_h + post-decision outcome column; IS-only p/complement baseline/embargo/direction/effect-in-pips engine rewrite; H013/H014 re-run + H015 relabelled descriptive; `negative` model verdict; AT-05 artifact-catching fixtures. `run_tests.bat` still needs verifying on Akash's own laptop. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR). Design restyle of the replay trainer + research report is next (deferred until 5.7 was fully done, per Akash's own rule against mixing design-system commits with ROADMAP work).
 
 Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
 call: keep building through the phases on the automated tests alone, and he'll sit down and look
@@ -1109,3 +1109,40 @@ tests in `tests/test_stats.py` (the exact 183-trade case; a straddles-zero CI at
 `promising` sanity checks). Full suite 173/173.
 
 **Not yet done:** 5.7.6 (AT-05 artifact-catching fixtures) -- the last item in Phase 5.7.
+
+## 2026-09-27 — Phase 5.7.6: artifact-catching fixtures (AT-05) -- Phase 5.7 complete
+
+**5.7.6 done -- last item in Phase 5.7.** `tests/fixtures/make_synth.py` gains a `twoera`
+variant: same random-walk engine as `clean` (still no real day-to-day edge anywhere), except
+volatility steps x0.6 -> x1.6 exactly halfway through the 5-year series -- a deliberate
+reproduction of H014's real-world artifact shape (RESEARCH_PROTOCOL.md S3: "selecting calm
+years, not calm days").
+
+**Confirmed by hand before writing the test** (so the fixture actually demonstrates the failure
+mode, not just superficially resembles it): a full-sample `quantile(asia_range, 0.2)` on this
+data flags 261 days, 100% of them from the calm era; those days' `ny_range > median` hit rate is
+4.6% vs. 61.3% for the rest -- a huge, entirely artifactual "effect" manufactured purely by the
+era-level volatility gap, not any genuine day-to-day predictability. The prior-only twin
+(`quantile_prior(asia_range, 0.2, 60)`) on the SAME data splits its 238 flagged days almost
+exactly 50/50 between the two eras, and the hit-rate gap collapses to 49.2% vs. 52.8% -- genuine
+noise, exactly as it should be.
+
+**New `tests/test_hyp_engine_at05.py`, three tests:**
+1. The full-sample-threshold twin is rejected by the loader against this fixture -- the same
+   syntactic check 5.7.1 already added (it fires on the DSL function name, not on the data), so
+   this restates it under the AT-05 name for ROADMAP traceability rather than testing anything
+   new by itself.
+2. The substantive new check: the prior-only twin is loaded and actually RUN through
+   `hyp_engine.evaluate()` against the twoera day table, asserting `verdict == "noise"` -- this
+   is what proves `quantile_prior()` genuinely fixes the artifact end-to-end, not just that it
+   passes a load-time syntax check.
+3. The outcome-window-overlap half of AT-05 (a fixture where the outcome window overlaps the
+   condition must be rejected) -- re-asserts `tests/test_hyp_loader.py`'s existing
+   `test_outcome_window_overlap_is_rejected` check under the AT-05 name, same reasoning as (1).
+
+**Phase 5.7 (statistics integrity) is now fully done, 5.7.1 through 5.7.6.** All of AT-01..AT-05
+pass: AT-01/AT-02 in `tests/test_hyp_engine_at.py` (re-confirmed after the 5.7.3 rewrite, no
+fixture strengthening needed), AT-03 in `tests/test_nylab_phase1.py`'s truncation tests, AT-04 by
+`nylab run`'s own wall-clock (~30s on the real 5-yr cache, well under the 90s budget), AT-05 in
+the new file above. Full suite 176/176. **Not yet done:** `run_tests.bat` has not been verified
+on Akash's own laptop -- only in this cloud-linked device session.

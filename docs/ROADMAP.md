@@ -226,13 +226,30 @@ The machinery must make these mistakes impossible, not just fixed once.
       `london_sweep_reversal` v1.0 (183 OOS trades, CI [-0.4165, -0.0371]) now reports `negative`
       in both summary.json and report.html, confirming docs/JEV_INTEGRATION.md S6.2's finding.
       New tests in `tests/test_stats.py`. Full suite 173/173.
-- [ ] 5.7.6 **Artifact-catching fixtures** (the mistake-proofing): a synthetic 5-yr series with two
+- [x] 5.7.6 **Artifact-catching fixtures** (the mistake-proofing): a synthetic 5-yr series with two
       volatility eras and NO day-level edge → a full-sample-threshold hypothesis must be REJECTED by the
       loader, and its prior-only twin must come out `noise`. A fixture where the outcome window overlaps
-      the condition → loader rejects. These become AT-05.
-**Accept:** AT-01..AT-05 pass; AT-02's planted edge still reaches `survives-oos` with IS-only p (if it
-no longer does on 5 yrs, strengthen the planted fixture — do NOT loosen the rule); `run_tests.bat`
-passes on Akash's laptop.
+      the condition → loader rejects. These become AT-05. Done 2026-09-27:
+      `tests/fixtures/make_synth.py` gains a `twoera` variant (same random-walk engine as
+      `clean` -- still no real day-to-day edge -- but volatility steps x0.6 -> x1.6 exactly
+      halfway through the 5-year series, reproducing H014's real-world artifact shape:
+      "selecting calm years, not calm days" (RESEARCH_PROTOCOL.md S3)). Confirmed by hand before
+      writing the test: a full-sample `quantile(asia_range, 0.2)` on this fixture flags 100% of
+      days from the calm era, whose `ny_range > median` hit rate is 4.6% vs. 61.3% for the rest --
+      a huge, entirely artifactual "effect"; `quantile_prior()` on the same data splits era-1
+      vs. era-2 days 50/50 and the hit-rate gap collapses to 49.2% vs. 52.8% (genuine noise). New
+      `tests/test_hyp_engine_at05.py`: the full-sample twin is rejected by the loader (same
+      syntactic check as 5.7.1, restated against this fixture for AT-05 traceability); the
+      prior-only twin is loaded and actually RUN through `hyp_engine.evaluate()` against the
+      twoera data, asserting `verdict == "noise"`; the outcome-window-overlap half of AT-05
+      re-asserts `tests/test_hyp_loader.py::test_outcome_window_overlap_is_rejected`'s check
+      under the AT-05 name. Full suite 176/176.
+**Accept:** AT-01..AT-05 pass (confirmed: AT-01/AT-02 in `tests/test_hyp_engine_at.py`, AT-03 in
+`tests/test_nylab_phase1.py`'s truncation tests, AT-04 by `nylab run`'s own ~30s wall-clock on the
+real 5-yr cache well under the 90s budget, AT-05 in `tests/test_hyp_engine_at05.py`); AT-02's
+planted edge still reaches `survives-oos` with IS-only p (confirmed after the 5.7.3 rewrite, no
+fixture strengthening needed); `run_tests.bat` has not yet been verified on Akash's own laptop,
+only in this cloud-linked device session.
 
 ## Phase 5.8 — Environment pinning (partly done 2026-09-26)
 - [x] 5.8.1 pandas-3 crashes fixed (`sessions._news_for_window`, `cross_session.combined_label`);
