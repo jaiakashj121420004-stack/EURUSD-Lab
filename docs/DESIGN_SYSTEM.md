@@ -12,20 +12,31 @@ documents the one system that was actually picked: **"Porcelain" (light, default
 (dark)**, a neumorphism + glass system (soft same-color-surface shadows for chrome, glass for
 overlays, flat/opaque for anything with real data on it — candles, tables, numbers). `nylab/
 label_validate.py`'s label-validation review page is the **first real (non-preview) surface**
-restyled to this system (2026-09-27) — surfaces A (replay trainer) and B (research report) in §1
-are still their own three separate palettes and are restyled later, one surface at a time, same
-rule: read `design/preview.html`'s current token values at restyle time, don't hand-copy this doc.
+restyled to this system (2026-09-27); surface A (replay trainer) got its tokens/colors/theme-
+toggle restyled the same day (§1 — layout/breakpoints still to do); surface B (research report)
+is still its own separate light-only palette, restyled later — same rule each time: read
+`design/preview.html`'s current token values at restyle time, don't hand-copy this doc.
 
 ## 1. Surfaces audited
 
 **A. Replay trainer** (`nylab/replay/static/{index.html,style.css,app.js}`, served by `server.py`/`api.py`).
-Currently: fixed 3-column CSS grid (300px | 1fr | 260px), no responsive breakpoints at all, dark-only
-palette with a `.light` body-class toggle already wired (`app.js:applyTheme`, `#darkToggle`), chart
-colors hardcoded twice — once in `style.css` custom properties, once again as literal hex inside
-`app.js` (`initChart`, `applyTheme`, `SESSION_BOXES`) — these two must become one source of truth.
-States: empty (no day loaded), loading (day list fetch), day loaded/no trade, pending order, open
-trade, trade closed, blind mode, spoiler day-table rows (`.spoiler`), breach (not yet styled —
-account panel is plain text rows today), dragging SL/TP line (`.dragging-line`).
+**Tokens/colors restyled 2026-09-27** (stage 1 of 3 — layout/breakpoints and the remaining polish
+below are still to do): full Porcelain/Espresso token set + elevation classes (`style.css`), the
+`.light` body-class toggle replaced by the standard `data-theme` attribute + `localStorage`
+`eurusd-theme` pattern (same as surface C), `#darkToggle`'s id/onchange contract kept exactly
+(now a CSS-styled switch, not a plain checkbox visually). Chart colors were hardcoded in THREE
+places (`style.css` vars, `app.js`'s `initChart`, `app.js`'s `applyTheme`) — now read live from
+the CSS via a `cssVar()` helper everywhere (`initChart`, `applyTheme`, `sessionBoxes()`,
+`drawLevelLines`, `applySessionMarkers`, `drawPositionLines`), one source of truth. Two new
+semantic tokens (`--level-asia`, `--level-weekly`) let the 5 level-line groups (London/Asia/
+daily/weekly/session-opens) stay visually distinct while everything else reuses the core 4 hues.
+Breach is now styled (`.breach`: bear color + diagonal hatch + an inline-SVG warning icon, no
+color-alone signal, no emoji) — previously plain unstyled text. Still to do: the responsive
+breakpoints in §8 (currently still a fixed 3-column grid, no phone/tablet layout at all), and the
+remaining §9 items (info-icon tooltips, an unmistakable masked state for blind-mode/spoiler rows
+beyond the existing opacity dim). States: empty (no day loaded), loading (day list fetch), day
+loaded/no trade, pending order, open trade, trade closed, blind mode, spoiler day-table rows
+(`.spoiler`), breach (styled), dragging SL/TP line (`.dragging-line`).
 
 **B. Research report** (`nylab/report/html.py` + `charts.py` + `sessions_section.py`). Single inline
 `<style>` block, light-only, fixed max-width 980px column, no dark mode. Charts are matplotlib PNGs

@@ -2,17 +2,35 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>EURUSD Session Research Lab -- Replay Trainer</title>
 <link rel="stylesheet" href="style.css">
 <script src="vendor/lightweight-charts.standalone.production.js"></script>
+<script>
+/* THEME (same pattern as design/preview.html / label_validate.py's review page) -- runs before
+   app.js so #darkToggle's initial checked state (and the chart's own initColors) already match
+   whatever was stored last time, instead of flashing dark-then-light. */
+(function(){
+  var root = document.documentElement;
+  function safeGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  window.__safeSetTheme = function(k,v){ try{ localStorage.setItem(k,v); }catch(e){} };
+  var stored = safeGet('eurusd-theme');
+  if(stored === 'light' || stored === 'dark'){ root.setAttribute('data-theme', stored); }
+  window.__currentTheme = function(){
+    var a = root.getAttribute('data-theme');
+    if(a) return a;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  };
+})();
+</script>
 </head>
-<body>
-<header id="topbar">
+<body class="elev-flat">
+<header id="topbar" class="elev-flat">
   <div class="group">
     <input type="date" id="datePicker">
-    <button id="prevDay" title="Previous filtered day">&#9664; prev</button>
-    <button id="nextDay" title="Next filtered day">next &#9654;</button>
-    <button id="randomDay" title="Random filtered day">&#127922; random</button>
+    <button id="prevDay" class="press" title="Previous filtered day">&#9664; prev</button>
+    <button id="nextDay" class="press" title="Next filtered day">next &#9654;</button>
+    <button id="randomDay" class="press" title="Random filtered day">&#127922; random</button>
   </div>
   <div class="group">
     <label>Start at</label>
@@ -31,12 +49,15 @@
   </div>
   <div class="group">
     <label><input type="checkbox" id="blindMode"> Blind mode</label>
-    <label><input type="checkbox" id="darkToggle" checked> Dark</label>
+    <label class="switch">Dark
+      <input type="checkbox" id="darkToggle" checked>
+      <span class="track"></span>
+    </label>
   </div>
 </header>
 
 <div id="layout">
-  <aside id="navigator">
+  <aside id="navigator" class="elev-flat">
     <div id="filters">
       <h3>Filters <span id="matchCount" class="muted"></span></h3>
       <label>From <input type="date" id="fFrom"></label>
@@ -53,10 +74,10 @@
       <label><input type="checkbox" id="fLonLow"> London low raided in NY</label>
       <div class="presetRow">
         <select id="presetSelect"><option value="">-- load preset --</option></select>
-        <button id="savePreset">save current as preset</button>
+        <button id="savePreset" class="press">save current as preset</button>
       </div>
     </div>
-    <div id="dayTableWrap">
+    <div id="dayTableWrap" class="elev-inset">
       <table id="dayTable">
         <thead><tr><th>Date</th><th>Day</th><th>NY rng</th><th>Lon rng</th></tr></thead>
         <tbody></tbody>
@@ -64,23 +85,23 @@
     </div>
   </aside>
 
-  <main id="chartArea">
+  <main id="chartArea" class="elev-flat">
     <div id="chart"></div>
-    <div id="playbar">
-      <button id="stepBack" title="Step back (review mode only)">&#9664;1</button>
-      <button id="stepFwd" title="Reveal next bar">1&#9654;</button>
-      <button id="stepHour">+1h</button>
-      <button id="playPause">&#9654; play</button>
+    <div id="playbar" class="elev-flat">
+      <button id="stepBack" class="press" title="Step back (review mode only)">&#9664;1</button>
+      <button id="stepFwd" class="press" title="Reveal next bar">1&#9654;</button>
+      <button id="stepHour" class="press">+1h</button>
+      <button id="playPause" class="press">&#9654; play</button>
       <select id="speed"><option value="1000">1/s</option><option value="500">2/s</option><option value="200">5/s</option><option value="50">20/s</option></select>
       <input type="time" id="jumpTime" step="60">
-      <button id="jumpBtn">jump</button>
-      <span id="clockLabel" class="muted"></span>
+      <button id="jumpBtn" class="press">jump</button>
+      <span id="clockLabel" class="muted tabular"></span>
     </div>
   </main>
 
-  <aside id="accountPanel">
+  <aside id="accountPanel" class="elev-flat">
     <h3>Maven account</h3>
-    <div id="acctSummary"></div>
+    <div id="acctSummary" class="elev-raised-soft" style="padding:10px 12px;border-radius:var(--radius-card)"></div>
     <hr>
     <h3>Order ticket</h3>
     <div id="ticket">
@@ -98,12 +119,12 @@
       <label>Risk % <input type="number" id="riskPct" value="0.5" step="0.1" min="0.1"></label>
       <label>SL <input type="number" id="slInput" step="0.00001"></label>
       <label>TP <input type="number" id="tpInput" step="0.00001"></label>
-      <div id="lotsPreview" class="muted"></div>
-      <button id="openTradeBtn">Place order</button>
-      <button id="cancelPendingBtn" disabled>Cancel pending order</button>
-      <button id="closeTradeBtn" disabled>Close trade</button>
-      <button id="partialCloseBtn" disabled title="Close half the position at market, keep the rest running">Partial close 50%</button>
-      <button id="moveBEBtn" disabled title="Move stop loss to entry price">Move SL to breakeven</button>
+      <div id="lotsPreview" class="muted tabular"></div>
+      <button id="openTradeBtn" class="press">Place order</button>
+      <button id="cancelPendingBtn" class="press" disabled>Cancel pending order</button>
+      <button id="closeTradeBtn" class="press" disabled>Close trade</button>
+      <button id="partialCloseBtn" class="press" disabled title="Close half the position at market, keep the rest running">Partial close 50%</button>
+      <button id="moveBEBtn" class="press" disabled title="Move stop loss to entry price">Move SL to breakeven</button>
       <p class="muted" style="margin:4px 0 0">Drag the SL/TP lines on the chart to adjust them.</p>
     </div>
     <div id="pendingInfo" class="muted"></div>
@@ -117,7 +138,7 @@
       </label>
       <label>Emotion (1-5) <input type="number" id="emotion" min="1" max="5" value="3"></label>
       <label>Notes <textarea id="notes" rows="2"></textarea></label>
-      <button id="saveJournalBtn" disabled>Save to journal + screenshot</button>
+      <button id="saveJournalBtn" class="press" disabled>Save to journal + screenshot</button>
     </div>
     <p class="muted footnote">Not financial advice. Practice tool only -- read-only against MT5.</p>
   </aside>

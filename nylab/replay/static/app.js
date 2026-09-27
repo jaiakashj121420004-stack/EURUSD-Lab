@@ -3,12 +3,28 @@
 // revealed timestamp. Stepping forward means "reveal one more 5-minute bar" -- the next
 // bar's TIME is known (fixed grid), its PRICE is not, until the server sends it.
 
-// Non-overlapping top-level session windows -- shaded boxes on the chart (Phase 2 gap-close).
-const SESSION_BOXES = [
-  ["Asia", -4, 0, "rgba(154,127,209,.10)"], ["London KZ", 2, 5, "rgba(79,140,255,.10)"],
-  ["NY AM", 7, 12, "rgba(34,176,125,.08)"], ["Lunch", 12, 13.5, "rgba(127,139,171,.10)"],
-  ["NY PM", 13.5, 16, "rgba(224,82,106,.08)"],
-];
+// ---------------------------------------------------------------- theme colors (single source
+// of truth: style.css's :root / :root[data-theme="dark"] custom properties. DESIGN_SYSTEM.md S1
+// flagged chart colors as hardcoded THREE times (style.css vars, initChart(), applyTheme()) --
+// every color below is read live from the CSS, so a palette change only ever happens in one file.
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function currentTheme() {
+  return (typeof window.__currentTheme === "function") ? window.__currentTheme() : "dark";
+}
+// Session-box fills (S3: "reuse the theme's own accent/amber/bull/bear at low opacity ~6-8%
+// per session" -- Asia/Lunch get a neutral text-3 tint since they aren't naturally one of those
+// four hues). Rebuilt on every theme change, not hardcoded, so it always matches the live theme.
+function sessionBoxes() {
+  return [
+    ["Asia", -4, 0, `rgba(${cssVar("--text-3-rgb")},.07)`],
+    ["London KZ", 2, 5, `rgba(${cssVar("--accent-rgb")},.10)`],
+    ["NY AM", 7, 12, `rgba(${cssVar("--bull-rgb")},.08)`],
+    ["Lunch", 12, 13.5, `rgba(${cssVar("--text-3-rgb")},.07)`],
+    ["NY PM", 13.5, 16, `rgba(${cssVar("--bear-rgb")},.07)`],
+  ];
+}
 // Narrower sub-windows (killzones / silver bullets) -- point markers only, would overlap if shaded.
 const SESSION_WINDOWS = [
   ["CBDR", -3], ["London SB", 3], ["NY AM KZ", 7], ["NY AM SB", 10], ["NY PM SB", 14],
@@ -47,27 +63,40 @@ async function computeR(side, entry, exitPrice, sl) {
 function initChart() {
   const el = $("#chart");
   state.chart = LightweightCharts.createChart(el, {
-    layout: { background: { color: "transparent" }, textColor: "#dbe2f0" },
-    grid: { vertLines: { color: "#22283a" }, horzLines: { color: "#22283a" } },
+    layout: { background: { color: "transparent" }, textColor: cssVar("--text-1") },
+    grid: { vertLines: { color: cssVar("--glass-border-dim") }, horzLines: { color: cssVar("--glass-border-dim") } },
     timeScale: { timeVisible: true, secondsVisible: false },
-    rightPriceScale: { borderColor: "#2a3348" },
+    rightPriceScale: { borderColor: cssVar("--glass-border-dim") },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
   });
   state.series = state.chart.addCandlestickSeries({
-    upColor: "#22b07d", downColor: "#e0526a", borderVisible: false,
-    wickUpColor: "#22b07d", wickDownColor: "#e0526a",
+    upColor: cssVar("--bull"), downColor: cssVar("--bear"), borderVisible: false,
+    wickUpColor: cssVar("--bull"), wickDownColor: cssVar("--bear"),
   });
   new ResizeObserver(() => { state.chart.resize(el.clientWidth, el.clientHeight); applySessionBoxes(); }).observe(el);
   state.chart.timeScale().subscribeVisibleLogicalRangeChange(() => applySessionBoxes());
   initDragHandlers();
 }
 
+// `dark` is kept as the parameter name for the #darkToggle onchange contract (DESIGN_SYSTEM.md
+// S2), but the theme itself lives on <html data-theme>, set by whoever calls this -- see the
+// #darkToggle handler below and the inline boot script in index.html for the two callers.
 function applyTheme(dark) {
-  document.body.classList.toggle("light", !dark);
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  if (typeof window.__safeSetTheme === "function") window.__safeSetTheme("eurusd-theme", dark ? "dark" : "light");
   state.chart.applyOptions({
-    layout: { textColor: dark ? "#dbe2f0" : "#1a2130" },
-    grid: { vertLines: { color: dark ? "#22283a" : "#e7ebf3" }, horzLines: { color: dark ? "#22283a" : "#e7ebf3" } },
+    layout: { textColor: cssVar("--text-1") },
+    grid: { vertLines: { color: cssVar("--glass-border-dim") }, horzLines: { color: cssVar("--glass-border-dim") } },
+    rightPriceScale: { borderColor: cssVar("--glass-border-dim") },
   });
+  state.series.applyOptions({
+    upColor: cssVar("--bull"), downColor: cssVar("--bear"),
+    wickUpColor: cssVar("--bull"), wickDownColor: cssVar("--bear"),
+  });
+  applySessionBoxes();
+  drawLevelLines();
+  drawPositionLines();
+  applySessionMarkers();
 }
 
 // ---------------------------------------------------------------- day list / filters
@@ -172,11 +201,11 @@ function drawLevelLines() {
   priceLines.forEach((pl) => state.series.removePriceLine(pl));
   priceLines = [];
   const show = [
-    ["lon_high", "London high", "#4f8cff"], ["lon_low", "London low", "#4f8cff"],
-    ["asia_high", "Asia high", "#9a7fd1"], ["asia_low", "Asia low", "#9a7fd1"],
-    ["pdh", "PDH", "#d9a441"], ["pdl", "PDL", "#d9a441"],
-    ["pwh", "Prev week high", "#c9784f"], ["pwl", "Prev week low", "#c9784f"],
-    ["mid_open", "Midnight open", "#7f8bab"], ["o0830", "08:30 open", "#7f8bab"], ["o0930", "09:30 open", "#7f8bab"],
+    ["lon_high", "London high", cssVar("--accent")], ["lon_low", "London low", cssVar("--accent")],
+    ["asia_high", "Asia high", cssVar("--level-asia")], ["asia_low", "Asia low", cssVar("--level-asia")],
+    ["pdh", "PDH", cssVar("--amber")], ["pdl", "PDL", cssVar("--amber")],
+    ["pwh", "Prev week high", cssVar("--level-weekly")], ["pwl", "Prev week low", cssVar("--level-weekly")],
+    ["mid_open", "Midnight open", cssVar("--text-3")], ["o0830", "08:30 open", cssVar("--text-3")], ["o0930", "09:30 open", cssVar("--text-3")],
   ];
   show.forEach(([key, label, color]) => {
     const v = state.levels[key];
@@ -198,7 +227,7 @@ function applySessionBoxes() {
   if (!state.currentTd || !state.chart) return;
   const ts = state.chart.timeScale();
   const untilEpoch = toEpoch(state.until);
-  SESSION_BOXES.forEach(([name, lo, hi, color]) => {
+  sessionBoxes().forEach(([name, lo, hi, color]) => {
     const t0 = toEpoch(tdPlusHours(state.currentTd, lo));
     const t1 = Math.min(toEpoch(tdPlusHours(state.currentTd, hi)), untilEpoch);
     if (t1 <= t0) return; // hasn't started yet at the current `until`
@@ -222,7 +251,7 @@ function applySessionBoxes() {
 function applySessionMarkers() {
   const markers = SESSION_WINDOWS.map(([name, lo]) => {
     const t = Math.floor(new Date(tdPlusHours(state.currentTd, lo)).getTime() / 1000);
-    return { time: t, position: "aboveBar", color: "#7f8bab", shape: "circle", text: name };
+    return { time: t, position: "aboveBar", color: cssVar("--text-3"), shape: "circle", text: name };
   }).filter((m) => m.time <= toEpoch(state.until));
   try { state.series.setMarkers(markers); } catch (e) { /* time not in visible range yet */ }
 }
@@ -431,7 +460,7 @@ async function refreshAccountPanel() {
     <div class="row"><span>Day P&amp;L</span><span>${s.day_pnl_pct.toFixed(2)}%</span></div>
     <div class="row"><span>Daily DD used</span><span class="badge ${s.day_dd_status}">${s.day_dd_used_pct.toFixed(2)}% / ${s.day_dd_limit_pct}%</span></div>
     <div class="row"><span>Max DD used</span><span class="badge ${s.max_dd_status}">${s.max_dd_used_pct.toFixed(2)}% / ${s.max_dd_limit_pct}%</span></div>
-    ${s.day_dd_breached || s.max_dd_breached ? '<div class="row" style="color:#e0526a">BREACHED</div>' : ""}
+    ${s.day_dd_breached || s.max_dd_breached ? `<div class="breach"><svg viewBox="0 0 24 24"><path d="M12 3 1 21h22L12 3z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>BREACHED</div>` : ""}
   `;
 }
 
@@ -447,15 +476,15 @@ function drawPositionLines() {
 
   if (state.pendingOrder) {
     pendingLine = state.series.createPriceLine({
-      price: state.pendingOrder.entry, color: "#d9a441", lineWidth: 1, lineStyle: 3,
+      price: state.pendingOrder.entry, color: cssVar("--amber"), lineWidth: 1, lineStyle: 3,
       title: `PENDING ${state.pendingOrder.side.toUpperCase()}`, axisLabelVisible: true,
     });
   }
   if (!state.position) return;
   const pos = state.position;
-  entryLine = state.series.createPriceLine({ price: pos.entry, color: "#7f8bab", lineWidth: 1, lineStyle: 0, title: "Entry", axisLabelVisible: true });
-  slLine = state.series.createPriceLine({ price: pos.sl, color: "#e0526a", lineWidth: 2, lineStyle: 2, title: "SL (drag)", axisLabelVisible: true });
-  if (pos.tp != null) tpLine = state.series.createPriceLine({ price: pos.tp, color: "#22b07d", lineWidth: 2, lineStyle: 2, title: "TP (drag)", axisLabelVisible: true });
+  entryLine = state.series.createPriceLine({ price: pos.entry, color: cssVar("--text-3"), lineWidth: 1, lineStyle: 0, title: "Entry", axisLabelVisible: true });
+  slLine = state.series.createPriceLine({ price: pos.sl, color: cssVar("--bear"), lineWidth: 2, lineStyle: 2, title: "SL (drag)", axisLabelVisible: true });
+  if (pos.tp != null) tpLine = state.series.createPriceLine({ price: pos.tp, color: cssVar("--bull"), lineWidth: 2, lineStyle: 2, title: "TP (drag)", axisLabelVisible: true });
 }
 
 function initDragHandlers() {
@@ -545,6 +574,10 @@ $("#savePreset").onclick = async () => {
 
 // ---------------------------------------------------------------- boot
 (async function init() {
+  // Sync the switch's initial position with whatever theme index.html's inline boot script
+  // already applied to <html data-theme> (stored preference, or system default) -- the HTML
+  // markup hardcodes checked="" as a sensible no-JS fallback only.
+  $("#darkToggle").checked = currentTheme() === "dark";
   initChart();
   await loadDayList();
   await loadPresetList();
