@@ -3,7 +3,7 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 5.7 (statistics integrity) in progress -- 5.7.1, 5.7.2 and 5.7.3 done (prior-only DSL thresholds; starts_at_h + post-decision outcome column; IS-only p/complement baseline/embargo/direction/effect-in-pips engine rewrite), 5.7.5/5.7.6 queued, 5.7.4 partly done. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR).
+## Status: Phase 5.7 (statistics integrity) in progress -- 5.7.1 through 5.7.5 done (prior-only DSL thresholds; starts_at_h + post-decision outcome column; IS-only p/complement baseline/embargo/direction/effect-in-pips engine rewrite; H013/H014 re-run + H015 relabelled descriptive; `negative` model verdict), 5.7.6 (AT-05 fixtures) queued -- the last item in the phase. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR).
 
 Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
 call: keep building through the phases on the automated tests alone, and he'll sit down and look
@@ -1075,3 +1075,37 @@ change, so no test impact expected or found).
 
 **Not yet done:** 5.7.5 (new `negative` verdict word -- needs Akash's confirmation of the name
 per the ROADMAP's own note) and 5.7.6 (AT-05 artifact-catching fixtures).
+
+## 2026-09-27 — Phase 5.7.4 resolved + Phase 5.7.5: `negative` model verdict (5 of 6)
+
+**5.7.4 fully closed.** Asked Akash whether to leave H013/H014's titles/outcome directions as-is
+or flip them to the volatility-clustering direction JEV_INTEGRATION.md S6.1 predicted; he
+delegated the call back ("choose the option which is best for the project"). Kept leave-as-is,
+per the reasoning already written into both YAMLs' notes: the two hypotheses' properly-measured
+signs disagree with each other and with S6.1's old (pre-fix-pipeline) finding, and neither is
+remotely significant, so there's no direction the current data actually supports strongly enough
+to bake into a title.
+
+**5.7.5 done** (Akash confirmed "negative" as the verdict word). docs/JEV_INTEGRATION.md S6.2:
+`nylab/__main__.py` classified a model's OOS result as `"promising" if ci_lo > 0 else "not
+proven"` -- with `london_sweep_reversal` v1.0's 183 OOS trades and a CI entirely below zero
+([-0.4165, -0.0371]), "not proven" undersold a confidently negative result as merely
+inconclusive; RESEARCH_PROTOCOL.md reserves "not proven" for genuinely small/ambiguous samples.
+
+New `nylab/stats.py::model_verdict(st_oos)` is now the single place a model's OOS `r_stats()`
+dict becomes one of exactly three words (mirroring the "one place decides a verdict" discipline
+`nylab/report/summary.py` already documents for hypotheses): `promising` (ci_lo > 0), `negative`
+(n >= 100 AND ci_hi < 0 -- both a large-enough sample AND the whole interval below zero, not just
+the point estimate), `not proven` (everything else). Found and fixed a SECOND, independent copy
+of the same buggy `ci_lo > 0` check in `nylab/report/html.py`'s inline HTML verdict box -- it now
+calls the same `model_verdict()` instead of re-deriving the classification a second time, with a
+third HTML branch added for the new `negative` case.
+
+**Verified end-to-end:** re-ran `nylab run` against the real 5-year cache -- `london_sweep_reversal`
+v1.0 (183 OOS trades, CI [-0.4165, -0.0371]) now reports `"verdict": "negative"` in summary.json
+and renders the new "Negative." box in report.html, in place of the old "Not proven." text. New
+tests in `tests/test_stats.py` (the exact 183-trade case; a straddles-zero CI at the same n stays
+`not proven`; a fully-negative CI below n=100 stays `not proven`; n=0 stays `not proven`; two
+`promising` sanity checks). Full suite 173/173.
+
+**Not yet done:** 5.7.6 (AT-05 artifact-catching fixtures) -- the last item in Phase 5.7.

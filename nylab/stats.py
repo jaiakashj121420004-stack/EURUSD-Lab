@@ -67,6 +67,36 @@ def wilson_ci(k: int, n: int, z: float = 1.96):
     return (max(0.0, lo), min(1.0, hi))
 
 
+# RESEARCH_PROTOCOL.md S9's model-verdict vocabulary (ROADMAP 5.7.5, 2026-09-27, Akash confirmed
+# "negative" as the word 2026-09-27): a model's OOS r_stats() dict decides one of exactly three
+# words -- the single place that decision is made, mirroring nylab.hyp_engine's own "exactly one
+# place decides a hypothesis's verdict" discipline (see nylab/report/summary.py's docstring).
+MODEL_VERDICTS = ("promising", "negative", "not proven")
+
+
+def model_verdict(st_oos: dict) -> str:
+    """Classify a model's OOS r_stats() dict (n/ci_lo/ci_hi) into MODEL_VERDICTS.
+
+    Fixed 2026-09-27 (docs/JEV_INTEGRATION.md S6.2): the pre-5.7.5 logic was a plain
+    `"promising" if ci_lo > 0 else "not proven"` -- with 183 OOS trades and a CI entirely below
+    zero (a large, confidently-losing sample), "not proven" is dishonest; RESEARCH_PROTOCOL.md
+    reserves that word for genuinely inconclusive/small-sample cases. "negative" is reserved for
+    OOS n >= 100 (RESEARCH_PROTOCOL's own bar for "enough data to trust the sign") AND ci_hi < 0
+    (the WHOLE interval below zero, not just the point estimate) -- a smaller-sample or
+    straddles-zero loss still reports "not proven", since neither is confident enough to call.
+    """
+    n = st_oos.get("n", 0)
+    if not n:
+        return "not proven"
+    ci_lo = st_oos.get("ci_lo", float("nan"))
+    ci_hi = st_oos.get("ci_hi", float("nan"))
+    if ci_lo > 0:
+        return "promising"
+    if n >= 100 and ci_hi < 0:
+        return "negative"
+    return "not proven"
+
+
 def r_stats(r) -> dict:
     r = pd.Series(r).dropna()
     n = len(r)

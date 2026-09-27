@@ -187,7 +187,7 @@ The machinery must make these mistakes impossible, not just fixed once.
       IS-only two-proportion test -- the ROADMAP's flagged fixture-strengthening risk did not
       materialize. New `tests/test_stats.py` and `tests/test_hyp_engine.py` added; full suite
       (171 tests) green.
-- [~] 5.7.4 Re-issue H013/H014 as **v1.1** with prior-only thresholds, post-09:30 outcomes and
+- [x] 5.7.4 Re-issue H013/H014 as **v1.1** with prior-only thresholds, post-09:30 outcomes and
       correctly-directed titles (m += 2). H015 re-labelled *descriptive* (decision 16:00 = outcome time,
       nothing left to predict). Expected result from the 2026-09-26 check: both noise. Done
       2026-09-27: re-ran `nylab run EURUSD_M5_2021-09-27_2026-09-25.csv --tz auto` against the real
@@ -210,9 +210,22 @@ The machinery must make these mistakes impossible, not just fixed once.
       the current numbers written into each YAML's `notes:` and the objective, computed-fresh-
       every-run `direction` column left as the honest record -- flagged for Akash to confirm he's
       OK with that call (or wants the titles reworded to the volatility-clustering direction
-      regardless of significance) before this line goes to `[x]`.
-- [ ] 5.7.5 Model verdict: OOS n ≥ 100 and CI upper < 0 → `negative` (new verdict word, Akash to
-      confirm). `london_sweep_reversal` v1.0 becomes `negative`.
+      regardless of significance) before this line goes to `[x]`. Akash's answer (2026-09-27):
+      delegated the call back ("choose the option which is best for the project") -- kept as
+      leave-as-is, for the reasons above (neither result is significant, and the two hypotheses'
+      signs disagree with each other and with the old S6.1 finding, so there is no direction the
+      data actually supports strongly enough to write into a title).
+- [x] 5.7.5 Model verdict: OOS n ≥ 100 and CI upper < 0 → `negative` (new verdict word, Akash to
+      confirm). `london_sweep_reversal` v1.0 becomes `negative`. Done 2026-09-27 (Akash confirmed
+      "negative" as the word): new `nylab/stats.py::model_verdict(st_oos)` is now the single place
+      that decision is made -- promising (ci_lo > 0) / negative (n >= 100 and ci_hi < 0) / not
+      proven (everything else, including n=0 or a small/straddles-zero sample). Both call sites
+      (`nylab/__main__.py`'s `model_stats` dict, and `nylab/report/html.py`'s inline HTML verdict
+      box, which had its own DUPLICATE `ci_lo > 0` check) now call this one function instead of
+      each re-deriving the verdict. Re-ran `nylab run` against the real 5-year cache:
+      `london_sweep_reversal` v1.0 (183 OOS trades, CI [-0.4165, -0.0371]) now reports `negative`
+      in both summary.json and report.html, confirming docs/JEV_INTEGRATION.md S6.2's finding.
+      New tests in `tests/test_stats.py`. Full suite 173/173.
 - [ ] 5.7.6 **Artifact-catching fixtures** (the mistake-proofing): a synthetic 5-yr series with two
       volatility eras and NO day-level edge → a full-sample-threshold hypothesis must be REJECTED by the
       loader, and its prior-only twin must come out `noise`. A fixture where the outcome window overlaps

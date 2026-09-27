@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from nylab import stats as stats_mod
+
 
 def pct(x):
     return "—" if x is None or (isinstance(x, float) and not np.isfinite(x)) else f"{x*100:.1f}%"
@@ -114,11 +116,22 @@ td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{backgro
         h.append("</table>")
         if "equity" in figs:
             h.append(f"<img src='data:image/png;base64,{figs['equity']}'>")
-        verdict = ("<div class='box good'><b>The OOS confidence interval is above zero.</b> Promising — next: vary one parameter at a time, "
-                   "check each year separately, then forward-test on demo.</div>") if st_oos.get("n", 0) and st_oos["ci_lo"] > 0 else \
-                  ("<div class='box warn'><b>Not proven.</b> The out-of-sample confidence interval includes zero (or is negative). "
-                   "Do NOT trade this as-is. Use it as a template: change one rule, re-run, and keep a log of every variant you tried "
-                   "(that count is your 'm' for the multiple-testing correction).</div>")
+        # ROADMAP 5.7.5 (2026-09-27): same three-way call as nylab.stats.model_verdict() (the
+        # one place that decision is made) -- this box just picks the matching HTML text for it,
+        # rather than re-deriving "promising"/"not proven" from ci_lo/ci_hi a second time here.
+        model_verdict = stats_mod.model_verdict(st_oos)
+        if model_verdict == "promising":
+            verdict = ("<div class='box good'><b>The OOS confidence interval is above zero.</b> Promising — next: vary one parameter at a time, "
+                       "check each year separately, then forward-test on demo.</div>")
+        elif model_verdict == "negative":
+            verdict = ("<div class='box warn'><b>Negative.</b> The out-of-sample confidence interval is entirely below zero, on a large "
+                       f"enough sample ({st_oos.get('n', 0)} trades) to trust the sign. This is not 'inconclusive' — it's evidence the rules "
+                       "as written lose money out-of-sample. Do NOT trade this as-is. Use it as a template: change one rule, re-run, and keep "
+                       "a log of every variant you tried (that count is your 'm' for the multiple-testing correction).</div>")
+        else:
+            verdict = ("<div class='box warn'><b>Not proven.</b> The out-of-sample confidence interval includes zero, or the sample is too "
+                       "small to trust the sign either way. Do NOT trade this as-is. Use it as a template: change one rule, re-run, and keep "
+                       "a log of every variant you tried (that count is your 'm' for the multiple-testing correction).</div>")
         h.append(verdict)
         yearly = trades.assign(y=pd.to_datetime(trades.td).dt.year).groupby("y").R_net.agg(["size", "mean", "sum"])
         h.append("<table><tr><th>Year</th><th>Trades</th><th>Expectancy (R)</th><th>Total R</th></tr>" +

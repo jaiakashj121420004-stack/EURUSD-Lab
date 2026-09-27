@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from nylab.stats import two_proportion_ztest, wilson_ci, ztest
+from nylab.stats import model_verdict, two_proportion_ztest, wilson_ci, ztest
 
 
 def test_wilson_ci_is_the_true_wilson_score_interval_not_wald():
@@ -66,6 +66,24 @@ def test_two_proportion_ztest_matches_ztest_when_groups_are_symmetric_around_p0(
     z_two, _ = two_proportion_ztest(70, 100, 50, 100)
     z_one, _ = ztest(70, 100, 0.5)
     assert (z_two > 0) == (z_one > 0)
+
+
+def test_model_verdict_negative_needs_both_n_and_a_fully_negative_ci():
+    """ROADMAP 5.7.5 / docs/JEV_INTEGRATION.md S6.2: a large, confidently-losing OOS sample must
+    not be called "not proven" -- that word is for genuinely inconclusive/small-sample cases."""
+    # Large n, CI entirely below zero -> negative (the exact london_sweep_reversal v1.0 case).
+    assert model_verdict({"n": 183, "ci_lo": -0.4165, "ci_hi": -0.0371}) == "negative"
+    # Large n, but CI straddles zero -> not proven (inconclusive, not confidently negative).
+    assert model_verdict({"n": 183, "ci_lo": -0.1, "ci_hi": 0.05}) == "not proven"
+    # CI entirely below zero, but n < 100 -> not proven (sample too small to trust the sign).
+    assert model_verdict({"n": 40, "ci_lo": -0.4, "ci_hi": -0.05}) == "not proven"
+    # No trades at all -> not proven.
+    assert model_verdict({"n": 0}) == "not proven"
+
+
+def test_model_verdict_promising_when_ci_lo_positive():
+    assert model_verdict({"n": 50, "ci_lo": 0.02, "ci_hi": 0.3}) == "promising"
+    assert model_verdict({"n": 500, "ci_lo": 0.001, "ci_hi": 0.4}) == "promising"
 
 
 def test_ztest_unchanged_for_frozen_v0_callers():

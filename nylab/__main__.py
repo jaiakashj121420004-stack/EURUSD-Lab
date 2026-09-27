@@ -134,7 +134,7 @@ def cmd_run(args):
                       E=round(float(st_oos.get("expectancy", float("nan"))), 4),
                       ci=[round(float(st_oos.get("ci_lo", float("nan"))), 4),
                           round(float(st_oos.get("ci_hi", float("nan"))), 4)]),
-            verdict="promising" if st_oos.get("n", 0) and st_oos.get("ci_lo", -1) > 0 else "not proven",
+            verdict=stats_mod.model_verdict(st_oos),  # ROADMAP 5.7.5: promising/negative/not proven
         )
 
     summ = summary_mod.build(run_id, meta, tz_check, H, m, model_stats, bonferroni_alpha=bonf_alpha)
