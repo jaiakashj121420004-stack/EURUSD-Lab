@@ -26,7 +26,8 @@ import pandas as pd
 
 from nylab import cross_session as cs
 from nylab import sessions as sessions_mod
-from nylab.report.charts import fig_b64
+from nylab.report.charts import THEMES, fig_b64
+from nylab.report.html import verdict_badge
 
 try:
     import matplotlib
@@ -76,34 +77,48 @@ def _bucket_table(b: pd.DataFrame, title: str, note: str = "") -> str:
     return "\n".join(h)
 
 
-def _heatmap_fig(df: pd.DataFrame, pip: float):
-    """Median range (pips) by NY hour (rows 0-16) x weekday (cols Mon-Fri) -- disclosed
-    simplification in the module docstring: whole-hour buckets, same convention charts.py uses."""
-    if plt is None:
-        return None
+def _heatmap_pivot(df: pd.DataFrame, pip: float):
     sub = df[(df.h >= 0) & (df.h < 17)].copy()
     sub["hour"] = sub.h.astype(int)
     sub["dow"] = sub.td.dt.dayofweek
     rng = sub.groupby(["td", "hour", "dow"]).agg(hi=("high", "max"), lo=("low", "min")).reset_index()
     rng["range_pips"] = (rng["hi"] - rng["lo"]) / pip
-    pivot = rng.groupby(["hour", "dow"])["range_pips"].median().unstack("dow").reindex(
+    return rng.groupby(["hour", "dow"])["range_pips"].median().unstack("dow").reindex(
         index=range(0, 17), columns=range(5))
+
+
+def _heatmap_fig(pivot, t):
+    """Median range (pips) by NY hour (rows 0-16) x weekday (cols Mon-Fri) -- disclosed
+    simplification in the module docstring: whole-hour buckets, same convention charts.py uses.
+    design-restyle (2026-09-27): styled with one of nylab.report.charts.THEMES so report.html's
+    theme toggle can swap light/dark versions, same as the other baked charts."""
     fig, ax = plt.subplots(figsize=(7, 4.5))
     im = ax.imshow(pivot.values, aspect="auto", cmap="YlOrRd", origin="lower")
     ax.set_yticks(range(len(pivot.index))); ax.set_yticklabels([f"{h}:00" for h in pivot.index], fontsize=7)
     ax.set_xticks(range(5)); ax.set_xticklabels(["Mon", "Tue", "Wed", "Thu", "Fri"])
     ax.set_xlabel("weekday"); ax.set_ylabel("NY hour")
     ax.set_title("Median range (pips) by NY hour x weekday", fontsize=10)
-    fig.colorbar(im, ax=ax, label="pips")
-    return fig_b64(fig)
+    cb = fig.colorbar(im, ax=ax, label="pips")
+    fig.patch.set_facecolor(t["bg"]); ax.set_facecolor(t["bg"])
+    for spine in ax.spines.values():
+        spine.set_color(t["grid"])
+    ax.tick_params(colors=t["muted"], labelsize=7)
+    ax.xaxis.label.set_color(t["muted"]); ax.yaxis.label.set_color(t["muted"])
+    ax.title.set_color(t["text"])
+    cb.ax.yaxis.label.set_color(t["muted"]); cb.ax.tick_params(colors=t["muted"])
+    cb.outline.set_edgecolor(t["grid"])
+    return fig
 
 
 def build_figs(df: pd.DataFrame, pip: float) -> dict:
-    """Extra figures for this section (called alongside nylab.report.charts.build())."""
+    """Extra figures for this section (called alongside nylab.report.charts.build()). Renders the
+    heatmap once per THEMES entry (light/dark) -- see charts.py's module docstring for why."""
     out = {}
-    hm = _heatmap_fig(df, pip)
-    if hm is not None:
-        out["hour_dow_heatmap"] = hm
+    if plt is None:
+        return out
+    pivot = _heatmap_pivot(df, pip)
+    for theme, t in THEMES.items():
+        out[f"hour_dow_heatmap_{theme}"] = fig_b64(_heatmap_fig(pivot, t), bg=t["bg"])
     return out
 
 
@@ -143,8 +158,10 @@ def build(df: pd.DataFrame, d: pd.DataFrame, session_tables: dict, sessions_cfg:
 
     # --- 6. Hour x weekday heatmap (S6 item 2) ---
     h.append("<h2>6 · Volatility heatmap — NY hour x weekday</h2>")
-    if "hour_dow_heatmap" in figs:
-        h.append(f"<img src='data:image/png;base64,{figs['hour_dow_heatmap']}'>")
+    if "hour_dow_heatmap_light" in figs:
+        h.append(f"<img class='chart-light' src='data:image/png;base64,{figs['hour_dow_heatmap_light']}'>")
+    if "hour_dow_heatmap_dark" in figs:
+        h.append(f"<img class='chart-dark' src='data:image/png;base64,{figs['hour_dow_heatmap_dark']}'>")
     h.append("<p class='muted'>Median range per hour bucket, split by weekday -- a finer-grained "
              "version of section 0's sanity check, useful for spotting day-of-week seasonality.</p>")
 
@@ -216,10 +233,10 @@ def build(df: pd.DataFrame, d: pd.DataFrame, session_tables: dict, sessions_cfg:
         h.append("<p class='muted'>Promoted from a transition matrix cell -- each one counts its "
                  "WHOLE matrix toward m (matrix_cells), not just the one cell that looked extreme "
                  "(SESSIONS_AND_CONTEXT.md S5.2).</p>")
-        h.append("<table><tr><th>Hypothesis</th><th>Family</th><th>Matrix cells</th><th>N</th>"
+        h.append("<table><tr><th>Hypothesis</th><th>Verdict</th><th>Family</th><th>Matrix cells</th><th>N</th>"
                  "<th>Hit</th><th>Baseline</th><th>Bonf.</th><th>Holds OOS</th></tr>")
         for _, r in rel.iterrows():
-            h.append(f"<tr><td>{r.hypothesis}</td><td>{r.family}</td><td>{int(r.matrix_cells)}</td>"
+            h.append(f"<tr><td>{r.hypothesis}</td><td>{verdict_badge(r.get('verdict'))}</td><td>{r.family}</td><td>{int(r.matrix_cells)}</td>"
                      f"<td>{r.n}</td><td>{_pct(r.hit)}</td><td>{_pct(r.baseline)}</td>"
                      f"<td class='{'y' if r.bonferroni_sig else 'n'}'>{'YES' if r.bonferroni_sig else 'no'}</td>"
                      f"<td class='{'y' if r.oos_holds else 'n'}'>{'YES' if r.oos_holds else 'no'}</td></tr>")

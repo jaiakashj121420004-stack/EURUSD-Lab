@@ -1,5 +1,14 @@
 """nylab.report.html -- report.html builder. Ported verbatim from ny_session_lab.py's
-html_report(), parameterized by pip + model params instead of a global CONFIG."""
+html_report(), parameterized by pip + model params instead of a global CONFIG.
+
+design-restyle (2026-09-27, surface B): CSS rebuilt on DESIGN_SYSTEM.md's Porcelain (light) /
+Espresso (dark) tokens, with a real theme toggle (same data-theme/localStorage pattern as the
+replay trainer, key `eurusd-theme` so a browser that keeps both open agrees on a theme). Every
+baked matplotlib chart is embedded twice (see nylab/report/charts.py's THEMES) with
+.chart-light/.chart-dark classes toggled by CSS so the shown image always matches the page theme.
+The RESEARCH_PROTOCOL.md S9 verdict vocabulary (noise/weak/candidate/survives-oos/not proven, plus
+model_verdict()'s promising/negative/not proven) gets an actual color+label badge via
+verdict_badge() instead of being left for the reader to infer from separate yes/no columns."""
 from __future__ import annotations
 
 import numpy as np
@@ -16,13 +25,114 @@ def num(x, f="{:.2f}"):
     return "—" if x is None or (isinstance(x, float) and not np.isfinite(x)) else f.format(x)
 
 
+# RESEARCH_PROTOCOL.md S9's verdict vocabulary, across both nylab.hyp_engine's per-hypothesis
+# verdict and nylab.stats.model_verdict()'s three-way model verdict -- one shared badge renderer
+# so every verdict word in the report (Section 3, Section 4, Section 10) looks the same way.
+_VERDICT_CLASS = {
+    "survives-oos": "v-strong", "promising": "v-strong",
+    "candidate": "v-mid",
+    "weak": "v-weak",
+    "noise": "v-flat", "not proven": "v-flat",
+    "negative": "v-bad",
+}
+
+
+def verdict_badge(word) -> str:
+    if word is None or (isinstance(word, float) and not np.isfinite(word)):
+        return "<span class='muted'>—</span>"
+    cls = _VERDICT_CLASS.get(word, "v-flat")
+    return f"<span class='badge {cls}'>{word}</span>"
+
+
+def _css() -> str:
+    return """
+:root{
+  --base:#F0EDE8; --panel:#FBF9F6; --border:#E3DACB;
+  --text-1:#2B2822; --text-2:#6B6459; --text-3:#968F82;
+  --accent:#0EA5A0; --accent-rgb:14,165,160; --amber:#E39B2F; --amber-rgb:227,155,47;
+  --bull:#0F9D76; --bull-rgb:15,157,118; --bear:#E5484D; --bear-rgb:229,72,77;
+}
+:root[data-theme="dark"]{
+  --base:#1E1B18; --panel:#26221D; --border:#3A342C;
+  --text-1:#EFE9E1; --text-2:#A79E92; --text-3:#746B60;
+  --accent:#2DD4BF; --accent-rgb:45,212,191; --amber:#F5B04C; --amber-rgb:245,176,76;
+  --bull:#22C39A; --bull-rgb:34,195,154; --bear:#FF6369; --bear-rgb:255,99,105;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]):not([data-theme="dark"]){
+    --base:#1E1B18; --panel:#26221D; --border:#3A342C;
+    --text-1:#EFE9E1; --text-2:#A79E92; --text-3:#746B60;
+    --accent:#2DD4BF; --accent-rgb:45,212,191; --amber:#F5B04C; --amber-rgb:245,176,76;
+    --bull:#22C39A; --bull-rgb:34,195,154; --bear:#FF6369; --bear-rgb:255,99,105;
+  }
+}
+*{box-sizing:border-box}
+body{font-family:"Segoe UI",Inter,Arial,sans-serif;max-width:980px;margin:0 auto;padding:30px 18px 60px;
+  color:var(--text-1);background:var(--base);line-height:1.55;transition:background .2s,color .2s}
+h1{color:var(--text-1);margin-bottom:4px}
+h2{color:var(--text-1);border-bottom:2px solid var(--amber);padding-bottom:4px;margin-top:34px}
+h3{color:var(--text-1);margin-top:22px}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th{background:var(--text-1);color:var(--base);text-align:left;padding:6px 8px}
+td{border-bottom:1px solid var(--border);padding:5px 8px}
+tr:nth-child(even) td{background:rgba(var(--accent-rgb),.04)}
+.box{padding:12px 14px;border-left:4px solid;border-radius:6px;margin:14px 0;background:var(--panel)}
+.warn{border-color:var(--bear)} .info{border-color:var(--accent)} .good{border-color:var(--bull)}
+.y{color:var(--bull);font-weight:700} .n{color:var(--text-3)}
+.muted{color:var(--text-2);font-size:13px}
+img{max-width:100%;border:1px solid var(--border);border-radius:8px;margin:8px 0;background:var(--panel)}
+img.chart-dark{display:none}
+:root[data-theme="dark"] img.chart-light{display:none}
+:root[data-theme="dark"] img.chart-dark{display:block}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]):not([data-theme="dark"]) img.chart-light{display:none}
+  :root:not([data-theme="light"]):not([data-theme="dark"]) img.chart-dark{display:block}
+}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;
+  border:1px solid transparent;white-space:nowrap}
+.v-strong{background:rgba(var(--bull-rgb),.14);color:var(--bull);border-color:rgba(var(--bull-rgb),.35)}
+.v-mid{background:rgba(var(--accent-rgb),.14);color:var(--accent);border-color:rgba(var(--accent-rgb),.35)}
+.v-weak{background:rgba(var(--amber-rgb),.16);color:var(--amber);border-color:rgba(var(--amber-rgb),.4)}
+.v-bad{background:rgba(var(--bear-rgb),.14);color:var(--bear);border-color:rgba(var(--bear-rgb),.35)}
+.v-flat{background:rgba(150,143,130,.14);color:var(--text-3);border-color:rgba(150,143,130,.3)}
+.footer-note{color:var(--text-3);font-size:12px;margin-top:26px;border-top:1px solid var(--border);padding-top:10px}
+#themeToggle{position:fixed;top:14px;right:14px;padding:6px 12px;border-radius:999px;border:1px solid var(--border);
+  background:var(--panel);color:var(--text-1);font-size:12px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+#themeToggle:hover{border-color:var(--accent)}
+@media print{ #themeToggle{display:none} }
+"""
+
+
+_THEME_SCRIPT = """<script>
+(function(){
+  try{
+    var saved = localStorage.getItem('eurusd-theme');
+    if (saved === 'light' || saved === 'dark') document.documentElement.setAttribute('data-theme', saved);
+  } catch(e){}
+})();
+function toggleReportTheme(){
+  try{
+    var cur = document.documentElement.getAttribute('data-theme');
+    var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var isDark = cur ? cur === 'dark' : mq;
+    var next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('eurusd-theme', next);
+  } catch(e){}
+}
+</script>"""
+
+
+def _chart_imgs(figs, key) -> str:
+    out = ""
+    if f"{key}_light" in figs:
+        out += f"<img class='chart-light' src='data:image/png;base64,{figs[f'{key}_light']}'>"
+    if f"{key}_dark" in figs:
+        out += f"<img class='chart-dark' src='data:image/png;base64,{figs[f'{key}_dark']}'>"
+    return out
+
+
 def build(meta, d, H, m, trades, st_all, st_is, st_oos, figs, pip, model_params, extra_section="") -> str:
-    css = """body{font-family:Segoe UI,Inter,Arial,sans-serif;max-width:980px;margin:30px auto;padding:0 18px;color:#1d2433;line-height:1.55}
-h1{color:#0f1a2e;margin-bottom:4px}h2{color:#0f1a2e;border-bottom:2px solid #e8c77a;padding-bottom:4px;margin-top:34px}
-table{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0}th{background:#0f1a2e;color:#fff;text-align:left;padding:6px}
-td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{background:#f6f7fa}.box{padding:12px 14px;border-left:4px solid;border-radius:6px;margin:14px 0}
-.warn{background:#fcecee;border-color:#c8354b}.info{background:#eef4fd;border-color:#2f73d6}.good{background:#eaf7f1;border-color:#119469}
-.y{color:#119469;font-weight:700}.n{color:#9aa6bd}.muted{color:#5e6678;font-size:13px}img{max-width:100%;border:1px solid #e3e6ee;border-radius:8px;margin:8px 0}"""
     D = d
     n = len(D)
     desc = [
@@ -47,7 +157,8 @@ td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{backgro
                                up=("ny_drive", lambda s: (s > 0).mean()))
     names = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 
-    h = [f"<html><head><meta charset='utf-8'><title>NY Session Lab — {meta['file']}</title><style>{css}</style></head><body>"]
+    h = [f"<html><head><meta charset='utf-8'><title>NY Session Lab — {meta['file']}</title><style>{_css()}</style></head>"
+         f"<body>{_THEME_SCRIPT}<button id='themeToggle' onclick='toggleReportTheme()'>Toggle theme</button>"]
     h.append(f"<h1>EURUSD New York Session Lab</h1><div class='muted'>{meta['file']} · {meta['first']} → {meta['last']} · "
              f"{n} trading days · {meta['bar']:.0f}-min bars · server time mode <b>{meta['tz']}</b> · "
              f"in-sample before {meta['split']}, out-of-sample after</div>")
@@ -56,8 +167,7 @@ td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{backgro
              "deserve further work. Section 4 is an example of turning an idea into rules and R-multiples. "
              "Before trusting ANY timing statistic, check Section 0: if the volatility profile doesn't spike at 08:30 and 09:30–11:00 NY, your --tz setting is wrong.</div>")
     h.append("<h2>0 · Sanity check — volatility by NY hour</h2>")
-    if "profile" in figs:
-        h.append(f"<img src='data:image/png;base64,{figs['profile']}'>")
+    h.append(_chart_imgs(figs, "profile"))
     h.append("<p class='muted'>Expected shape for EURUSD: a bump at London open (02:00–04:00), the biggest bars 08:00–11:00, a fade into lunch. "
              "If the peak sits somewhere else (e.g. 15:00–18:00), rerun with --tz utc or --tz utc+2.</p>")
 
@@ -67,8 +177,7 @@ td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{backgro
     h.append(f"</table><p class='muted'>Median ADR(5) share already used by 09:30 NY: {pct(D.adr_used_0930.median())}.</p>")
 
     h.append("<h2>2 · What the NY session does</h2>")
-    if "extremes" in figs:
-        h.append(f"<img src='data:image/png;base64,{figs['extremes']}'>")
+    h.append(_chart_imgs(figs, "extremes"))
     h.append("<table><tr><th>Observation</th><th>Frequency</th></tr>")
     for nm, v in desc:
         h.append(f"<tr><td>{nm}</td><td>{pct(v)}</td></tr>")
@@ -80,10 +189,12 @@ td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{backgro
     h.append(f"<h2>3 · Hypothesis tests ({m} ideas tested)</h2>"
              f"<p class='muted'>Hit = how often the outcome happened when the condition was true. Baseline = how often the same outcome happens on ALL days. "
              f"An idea matters only if hit is meaningfully above baseline. Bonferroni threshold: p &lt; {0.05/m:.4f}. "
-             f"'Holds OOS' = still ≥3 points better than baseline on the unseen out-of-sample period (≥20 cases).</p>")
-    h.append("<table><tr><th>Hypothesis</th><th>N</th><th>Hit</th><th>Baseline</th><th>95% CI</th><th>z</th><th>Bonf.</th><th>IS hit</th><th>OOS hit (n)</th><th>Holds OOS</th></tr>")
+             f"'Holds OOS' = still ≥3 points better than baseline on the unseen out-of-sample period (≥20 cases). "
+             f"'Verdict' is RESEARCH_PROTOCOL.md S9's single call on each row (noise/weak/candidate/survives-oos/not proven) -- "
+             "it's the same call the ledger records, not re-derived here.</p>")
+    h.append("<table><tr><th>Hypothesis</th><th>Verdict</th><th>N</th><th>Hit</th><th>Baseline</th><th>95% CI</th><th>z</th><th>Bonf.</th><th>IS hit</th><th>OOS hit (n)</th><th>Holds OOS</th></tr>")
     for _, r in H.iterrows():
-        h.append(f"<tr><td>{r.hypothesis}</td><td>{r.n}</td><td>{pct(r.hit)}</td><td>{pct(r.baseline)}</td>"
+        h.append(f"<tr><td>{r.hypothesis}</td><td>{verdict_badge(r.get('verdict'))}</td><td>{r.n}</td><td>{pct(r.hit)}</td><td>{pct(r.baseline)}</td>"
                  f"<td>{pct(r.ci_lo)}–{pct(r.ci_hi)}</td><td>{num(r.z)}</td>"
                  f"<td class='{'y' if r.bonferroni_sig else 'n'}'>{'YES' if r.bonferroni_sig else 'no'}</td>"
                  f"<td>{pct(r.is_hit)}</td><td>{pct(r.oos_hit)} ({r.oos_n})</td>"
@@ -114,22 +225,22 @@ td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{backgro
                          f"<td>{num(s['ci_lo'],'{:+.2f}')} to {num(s['ci_hi'],'{:+.2f}')}</td><td>{num(s['t'])}</td>"
                          f"<td>{num(s['profit_factor'])}</td><td>{num(s['sqn'])}</td><td>{num(s['max_dd_R'],'{:.1f}')}</td><td>{s['longest_losing_streak']}</td></tr>")
         h.append("</table>")
-        if "equity" in figs:
-            h.append(f"<img src='data:image/png;base64,{figs['equity']}'>")
+        h.append(_chart_imgs(figs, "equity"))
         # ROADMAP 5.7.5 (2026-09-27): same three-way call as nylab.stats.model_verdict() (the
         # one place that decision is made) -- this box just picks the matching HTML text for it,
         # rather than re-deriving "promising"/"not proven" from ci_lo/ci_hi a second time here.
         model_verdict = stats_mod.model_verdict(st_oos)
+        badge = verdict_badge(model_verdict)
         if model_verdict == "promising":
-            verdict = ("<div class='box good'><b>The OOS confidence interval is above zero.</b> Promising — next: vary one parameter at a time, "
+            verdict = (f"<div class='box good'><b>{badge} The OOS confidence interval is above zero.</b> Next: vary one parameter at a time, "
                        "check each year separately, then forward-test on demo.</div>")
         elif model_verdict == "negative":
-            verdict = ("<div class='box warn'><b>Negative.</b> The out-of-sample confidence interval is entirely below zero, on a large "
+            verdict = (f"<div class='box warn'><b>{badge} The out-of-sample confidence interval is entirely below zero</b>, on a large "
                        f"enough sample ({st_oos.get('n', 0)} trades) to trust the sign. This is not 'inconclusive' — it's evidence the rules "
                        "as written lose money out-of-sample. Do NOT trade this as-is. Use it as a template: change one rule, re-run, and keep "
                        "a log of every variant you tried (that count is your 'm' for the multiple-testing correction).</div>")
         else:
-            verdict = ("<div class='box warn'><b>Not proven.</b> The out-of-sample confidence interval includes zero, or the sample is too "
+            verdict = (f"<div class='box warn'><b>{badge} The out-of-sample confidence interval includes zero</b>, or the sample is too "
                        "small to trust the sign either way. Do NOT trade this as-is. Use it as a template: change one rule, re-run, and keep "
                        "a log of every variant you tried (that count is your 'm' for the multiple-testing correction).</div>")
         h.append(verdict)
@@ -142,5 +253,7 @@ td{border-bottom:1px solid #e3e6ee;padding:5px 6px}tr:nth-child(even) td{backgro
         h.append(extra_section)
     h.append("<h2>Files</h2><p class='muted'><b>days.csv</b> — one row per day with every level and flag above (open it in Excel and filter). "
              "<b>trades.csv</b> — every example-model trade with entry, stop, target, exit and R. "
-             "Always open 10–20 of those trades on your MT5 chart and check the rules did what you think they did.</p></body></html>")
+             "Always open 10–20 of those trades on your MT5 chart and check the rules did what you think they did.</p>")
+    h.append("<div class='footer-note'>Not financial advice -- this is a research report, no live trading, read-only against MT5. "
+             "Every number above is historical; nothing here is a recommendation to trade anything live.</div></body></html>")
     return "\n".join(h)

@@ -76,8 +76,10 @@ def test_build_figs_returns_heatmap_key():
     raw, d, session_tables, sessions_cfg, cal, pip = _build_pipeline()
     figs = ss.build_figs(raw, pip)
     if charts_mod.plt is not None:
-        assert "hour_dow_heatmap" in figs
-        assert isinstance(figs["hour_dow_heatmap"], str) and len(figs["hour_dow_heatmap"]) > 100
+        for theme in ("light", "dark"):
+            key = f"hour_dow_heatmap_{theme}"
+            assert key in figs
+            assert isinstance(figs[key], str) and len(figs[key]) > 100
 
 
 def test_build_returns_html_with_all_section_headers(tmp_path):
