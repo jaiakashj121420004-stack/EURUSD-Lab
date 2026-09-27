@@ -719,6 +719,68 @@ review sample generated, second review round pending), 6 Replay trainer v2, 7 IC
 models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop
 (ongoing).
 
+## 2026-09-27 (round 4 scored) -- independent-judge review of Akash's round-4 answers
+
+91 rows answered, 14 disagreements (77 agree). Raw tally: chop 22/30 (73.3%, FAILS the 80% bar),
+reversal 16/19 (84.2%), trend 14/15 (93.3%), range_both 4/5, quiet 9/9, day_type families all
+>=80% (n too small on several to mean much -- outside_day n=1, reversal_day n=2). Wilson 95% CI
+(not Wald, per Akash's own scoring rule) on chop: [0.556, 0.858] -- the point estimate is under
+80%, but the interval comfortably straddles it at n=30; not confident evidence the true rate is
+below 80%, just a nudge that needs more data, not a rewrite.
+
+Scored as an INDEPENDENT JUDGE, not a tally -- every one of the 14 disagreements was re-derived
+by hand from the raw cached range_rel/er/close_loc (sessions) or day_high/day_low/pdh/pdl
+(day_type) and, where a raid/sweep flag was in question, from the actual price levels
+(not trusted from the pipeline), same method as round 2's TASK A:
+
+- **Rule verified correct, Akash likely missed something (5):** 2023-05-08 lon_ny_gap
+  (reversal; took_prev_low confirmed by 12.9 pips), 2023-08-17 lon (reversal; took_prev_high
+  confirmed by 12.2 pips), 2023-08-17 nyam_kz (chop; er=0.16, close_loc=0.492 dead center --
+  doesn't fit "Trend" by the rule's own definition), 2025-07-31 nyam_sb (chop; range_rel=1.413
+  is large but close_loc=0.535 is dead center -- big range isn't the same thing as trend),
+  **2026-06-10 nyam_sb (range_both; Akash said "DIDNT TAKE THE PREV SESSION'S HIGH" -- checked
+  by hand: nyam_sb's high (1.15670) DID clear lon's high (1.15586) by 8.4 pips, a clean, visible
+  margin, not a rounding artifact. His raid-flag claim was wrong, not the pipeline.**
+- **Known "reversal overrides near-trend" priority tension, another instance (1):** 2023-08-17
+  nyam_sb -- er=0.448, just 0.002 short of trend_er's 0.45 line, AND took both prev high and low
+  (both_sides=True) with close_loc=0.207 -- reversal's own condition also fires here
+  (took_high & close_loc<=0.35), and reversal has priority. Correct per the frozen rule as
+  written; same design tension flagged in round 2 (reversal always wins even at a near-zero
+  margin), still Akash's call whether that priority order is right, not a bug to silently fix.
+- **Exact-boundary case, day_type (1):** 2023-08-17 -- close_loc computes to EXACTLY 0.2500,
+  landing precisely on trend_day's own cutoff. Akash called it "consolidation day." Not wrong
+  per the rule (trend_day's own condition is `<=0.25`, satisfied by equality), but about as
+  razor-thin as a boundary case gets -- worth deciding whether trend_day's edge should be
+  inclusive or not, independent of any threshold VALUE change.
+- **Akash uncertain himself, not a confident override (3):** 2023-05-09 nyam_kz ("downtrend?",
+  er=0.243 just 0.007 from chop's 0.25 line but close_loc=0.501 dead center -- doesn't support a
+  clean "downtrend" story), 2025-06-16 lon ("I might agree, I am confused" -- close_loc=0.822 is
+  extreme but range_rel=1.303 misses trend_range's 1.4 line by 0.097), 2025-06-16 lon_ny_gap
+  (same note reused, but this session's own numbers -- er=0.12, range_rel=0.625 -- aren't close
+  to any boundary at all; likely spillover from the lon comment on the same day, not a separate
+  complaint).
+- **Recurring "extreme close_loc / big range, but chop by an er or range_rel margin" shape (4
+  new instances this round):** 2024-06-13 nyam_kz (trend fired via trend_range -- range_rel=1.51,
+  close_loc=0.192 -- despite er=0.047, an extremely inefficient path; Akash disagreed the other
+  way, calling it "chop"), 2025-07-31 nyam_kz (chop; close_loc=0.12 is extreme but range_rel=1.25
+  misses 1.4), 2026-05-22 lon_ny_gap (chop; close_loc=0.172 extreme but range_rel=0.785, far
+  under 1.4), and the strongest single data point yet: **2026-03-23 nyam_kz** -- range_rel=2.663
+  (a genuinely huge range), close_loc=0.74 (0.01 short of trend_er's 0.75 line, 0.06 short of
+  trend_range's 0.80 line), er=0.244 (0.006 short of chop's own 0.25 line) -- a session missing
+  "trend" on three separate near-boundary margins simultaneously. Combined with round 2's one
+  prior instance of the same shape, this is now 5 total occurrences across two rounds --
+  crossing Akash's own stated bar ("propose a threshold change only with >=3 same-shape cases").
+  **Not touched yet** -- per RESEARCH_PROTOCOL.md's frozen-thresholds rule and Akash's own
+  scoring instructions ("verify against the full 5-year distribution, never on the same days
+  used to find the pattern -- generate a fresh sample with a different seed"), this needs a
+  dedicated fresh-sample verification pass before any of trend_range/trend_er/chop's numbers
+  move, not a same-round edit. Flagged for Akash's decision on whether to run that next.
+
+No thresholds in `nylab/sessions.py` were changed. `research/label_validation/
+label_validation_answers_r4.json` holds Akash's raw answers (gitignored, matches existing
+`research/label_validation/` pattern).
+
+
 ## 2026-09-27 (later) — label-validation round 4: <15 days, "normal" dropped from review
 
 Akash, on seeing round 3 land at 34 days instead of the promised <20: "i want it to have less
