@@ -1,0 +1,22 @@
+# ROADMAP 7.5: silver_bullet_fvg parameterized by window -- this file runs it in the London
+# Silver Bullet window. Same code (nylab.models.silver_bullet_fvg), a DIFFERENT config file per
+# window is how "3 separate ledger entries" happens (RESEARCH_PROTOCOL.md: testing the same rule
+# across 3 different windows is like testing 3 hypotheses -- each gets its own (id, version)
+# ledger row so the Bonferroni universe m accounts for all 3, not just 1).
+name: silver_bullet_fvg_lonsb
+version: "1.0"
+description: >
+  Silver Bullet (London): a sweep inside the London Silver Bullet killzone (kz_window) that
+  triggers a Market Structure Shift, then a retracement into the MSS leg's own fair value gap,
+  entered in the direction of continuation. Stop beyond the gap's far edge, target a fixed R
+  multiple, flat well after the scan window.
+params:
+  kz_window: [3.0, 4.0]     # lon_sb, config/windows.yaml -- the true killzone: sweep must start here
+  window: [3.0, 7.0]        # engine's candidate-scanning window: kz_window + room for the MSS
+                             # (up to mss_max_bars=24 bars=2h later) and the retracement entry
+                             # (up to entry_max_bars_after_mss below) to actually land inside it --
+                             # kz_hi(4.0) + mss_max_bars(2h) + entry_max_bars_after_mss(1h) = 7.0
+  entry_max_bars_after_mss: 12   # 1h on M5: retracement must happen within this many bars of the MSS
+  stop_buffer_pips: 1.0
+  rr: 2.0
+  time_exit: 7.5

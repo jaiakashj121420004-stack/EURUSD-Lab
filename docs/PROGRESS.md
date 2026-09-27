@@ -1280,3 +1280,156 @@ new ids/classes this phase added, and its §1 "ahead-only previews" section need
 that these are real, working features rather than mockups -- planned as a separate,
 design-system-only commit per the usual rule (design-system work and ROADMAP/logic work never
 share a commit).
+
+## Phase 7 — ICT features & models (2026-09-27)
+
+Full pass in one stretch per Akash's instruction ("start phase 7. Full run in a stretch, then
+verify everything and report to me"): all of 7.1-7.7 plus the `context_filter` clause tucked
+inside 7.5's own bullet, which was easy to miss on a first read of ROADMAP.md.
+
+**7.1 Swings & structure** (`nylab/structure.py`): `label_swings(bars, n=2)` builds on the
+existing `nylab.ict_features.fractal_swings()` rather than re-deriving fractal detection;
+`structure_score_at`/`structure_score_series` implement FEATURES_SPEC §4's
+`(HH+HL-LH-LL)/k` over the last k CONFIRMED swings, respecting each swing's own `available_at`
+(pivot position + n bars) so a score computed "as of" bar i never counts a swing that hadn't
+resolved yet by bar i.
+
+**7.2 Events** (`nylab/events.py`): `fvg_lifecycle` (first_touch/ce_touch/full_fill/invalidated
+per FEATURES_SPEC §7), `detect_raids` (raid/sweep/break per §3, importing
+`BREAK_CLOSE_PIPS`/`K_BACK`/`RAID_TOL_PIPS` directly from `nylab.sessions` instead of
+re-deriving them), `detect_mss` (§8: the first CLOSE beyond the most recent confirmed opposite
+swing that formed BEFORE the sweep's own extreme, gated on a genuine displacement candle,
+within `mss_max_bars`), `detect_order_blocks` (§9, low priority). Two performance rewrites were
+needed to make these usable at real multi-year scale — see "Bugs found" below.
+
+**7.3 Events report** (`nylab/events_report.py`): `build_events_table` assembles the
+events.parquet-shaped dict of tables (raids/mss/fvg/order-blocks), reusing
+`nylab.sessions.SESSION_IDS`/`_PREV_IN_CHAIN` and `nylab.days.window()` for the exact same
+per-session levels convention `nylab.sessions` already validated, rather than a second
+implementation of "what are this session's levels". `descriptive_stats` computes FVG fill
+rates and sweep→MSS conversion. Deliberately kept DESCRIPTIVE — it does not feed new columns
+into `d`/`hyp_engine`, so it can't silently inflate the hypothesis multiple-testing count; a
+specific finding that looks worth testing formally becomes its own hypothesis YAML.
+
+**7.4 Backtest engine** (`nylab/backtest.py`): `run_backtest(model, df, d, pip,
+cost_pips_default, events=None, one_trade_per_day=True)` — ARCHITECTURE.md §4's Model protocol,
+implemented ONCE so every model shares one fill-rule/cost/time-exit implementation rather than
+each model reimplementing its own. Conservative same-bar fills delegate to
+`nylab.replay.sim.check_bar`/`compute_r` — the SAME functions the replay trainer's practice-trade
+fill engine uses, so a manual practice trade and a coded backtest trade are judged by identical
+rules. Models never see future bars: the engine calls `model.signals(day_bars.iloc[:i+1], ...)`
+for every candidate bar. `events` accepts either one DataFrame or a dict of named tables (needed
+for `silver_bullet_fvg`, which reads both an MSS table and an FVG table with different shapes).
+
+**7.5 Models**: `nylab.models.london_sweep_reversal.LondonSweepReversalModel` wraps the existing
+frozen v0 `backtest()` function as an ARCHITECTURE.md §4 Model, preserving its exact "scan both
+sides, earliest-resolving side wins, but if that side fails the risk filter the WHOLE DAY is
+abandoned rather than falling back to the other side" behavior via a `self._abandoned_days`
+set. Proven trade-for-trade IDENTICAL to the ad hoc function
+(`tests/test_models_london_sweep_reversal.py`, 274/274 trades matching on the real 2-year
+fixture) — this is why it stays version "1.0" (a plumbing refactor, not a new rule). New:
+`nylab.models.silver_bullet_fvg.SilverBulletFVGModel` — wait for an MSS inside the window whose
+triggering sweep lands in the true killzone (`kz_window`), enter on the first retracement into
+the MSS leg's own FVG center within `entry_max_bars_after_mss` bars, stop beyond the FVG's far
+edge, fixed R target. Run via 3 separate YAML configs/ledger entries
+(`silver_bullet_fvg_lonsb`/`_nyamsb`/`_nypmsb`) per RESEARCH_PROTOCOL's multiple-testing rule —
+same rule tested in 3 different windows counts as 3 tests, gets 3 ledger rows, not 1.
+`context_filter` support (SESSIONS_AND_CONTEXT.md §5.3, easy to miss inside 7.5's own bullet):
+`nylab.config.ModelConfig.context_filter` (validated at YAML-load time via `nylab.hyp_dsl` — the
+SAME whitelist DSL evaluator hypothesis YAMLs already use, not a second parser) and
+`nylab.backtest.run_backtest_with_context_filter`, which runs the backtest once and
+POST-hoc-splits the resulting trades into filtered/unfiltered/complement + `nylab.stats.r_stats()`
+per bucket (the filter doesn't change what a trade did, only which report bucket it's counted in).
+
+**7.6 Regime features** (`nylab/regime.py`): `add_regime_features` computes `adr_ratio` (=
+`adr5/adr20`, both already available), `er10` (codex variant: |net 10-day move| / Σ 10 daily
+ranges), `adx14_d1`/`chop14_d1` (classic Wilder ADX / Choppiness Index on the daily OHLC series),
+`realized_vol_pct` (percentile rank of trailing 20-day realized vol within a trailing 126-day
+lookback) — all FEATURES_SPEC §11, all built from PREVIOUS COMPLETED days only and `.shift(1)`'d
+so they're available at h=-7, all registered in `nylab.days.COLUMN_DOCS` for the look-ahead
+checker. `tercile()` buckets any Series into low/mid/high via in-sample `qcut(3)` — explicitly
+for slicing already-computed REPORT results, not for use inside a hypothesis `condition` (that
+would be exactly the full-sample-quantile look-ahead `nylab.hyp_dsl`'s `quantile_prior()` split
+already exists to prevent — documented directly in the function's own docstring so nobody
+reaches for it inside a YAML `condition` by mistake).
+
+**7.7 Walk-forward** (`nylab/walkforward.py`): `make_folds` splits the trading-day index into
+rolling (fixed-width IS, slides forward) or expanding (IS always starts at day 0) folds;
+`run_walkforward` runs a FRESH model instance per fold (`model_factory()`) through
+`run_backtest`, restricted to that fold's own day range, and returns per-fold IS/OOS
+`nylab.stats.r_stats()` plus every fold's OOS trades pooled into one aggregate stat — turning
+"one lucky/unlucky OOS window" into "OOS performance across the whole history, evaluated one
+forward step at a time" (RESEARCH_PROTOCOL's "OOS is sacred"). Fresh-model-per-fold matters
+because `SilverBulletFVGModel`/`LondonSweepReversalModel` both carry per-trading-day walk state
+across `signals()` calls within one `run_backtest` run.
+
+**Bugs found and fixed:**
+- `fvg_lifecycle` (originally a pure-Python per-event loop, up to 576 iterations each) and
+  `detect_mss` (originally re-filtered the entire swings/FVG tables per raid — O(n_raids ×
+  n_swings)) were both too slow to finish on multi-year real-scale data. Rewrote `fvg_lifecycle`
+  with numpy `flatnonzero` on sliced boolean arrays; rewrote `detect_mss`'s swing/leg-FVG lookups
+  with a one-time precomputed sorted-position array + `np.searchsorted` binary search per event.
+  Verified on the real 2-year (150k bars, 6.6s) and 5-year (375k bars, 18.3s) fixtures — both
+  previously did not finish in a reasonable time.
+- `detect_raids`: after classifying a "break" (price never closed back within `k_back`), the
+  original loop resumed scanning immediately, which meant every subsequent bar of an extended
+  trend got independently (and wrongly) counted as its own new raid — 8 raids detected instead
+  of 1 on an 8-bar synthetic extended-trend fixture. Fixed with explicit reset-detection: after a
+  "break", scan forward for price to genuinely return to the original side before resuming the
+  scan for a NEW raid.
+- `SilverBulletFVGModel.signals()`: the day-resolved flag was being set the instant a qualifying
+  MSS candidate was found — before checking whether the retracement into the FVG's `ce` had
+  actually happened. Since the retracement essentially never lands on the exact same bar the MSS
+  itself confirms, every trading day silently gave up on its very first call, and the model
+  produced ZERO trades end to end across all 3 window variants on the real 2-year fixture. Found
+  by cross-referencing the FVG lifecycle table's own `ce_touch_idx` against each MSS candidate
+  and confirming genuine retracements existed that the live model never fired on. Fixed by
+  splitting "which MSS this day is committed to tracking" (`self._committed`, persists across
+  calls so a later bar can still see the retracement) from "is this day genuinely, terminally
+  done" (`self._done_days`, only set when a signal fires, the MSS has no leg FVG, its FVG row
+  can't be found, the entry deadline expires, or the resulting risk is degenerate). Re-verified
+  with an independent bar-by-bar diagnostic script that cross-checked every candidate's real
+  touch/risk/deadline outcome against the live model's trade output; the resulting counts (2, 0,
+  2 trades across lonsb/nyamsb/nypmsb on 2 years of synthetic data) were then confirmed to be a
+  genuine consequence of the minimum-FVG-size threshold (0.8 pips / 0.15×ATR) making most gaps'
+  half-width fall under the model's own 2-pip risk floor — not a further bug, just a strict rule
+  rarely qualifying on this particular synthetic series.
+- Two of the three `silver_bullet_fvg_*.yaml` configs' `window` (the engine's own
+  candidate-scanning restriction) were narrower than `kz_window` + `mss_max_bars` +
+  `entry_max_bars_after_mss` requires — the engine would never even call the model on the bars
+  where a late-arriving valid entry needed to happen. Widened `silver_bullet_fvg_lonsb.yaml`
+  (window hi 6.0→7.0, time_exit 7.0→7.5) and `silver_bullet_fvg_nypmsb.yaml` (window hi
+  17.0→18.0, time_exit 17.5→18.5); `silver_bullet_fvg_nyamsb.yaml`'s window was already wide
+  enough. Re-verified this widening had (correctly) no effect on the already-narrow-enough
+  cases and did not change trade counts — the true bottleneck was the `_committed`/`_done_days`
+  bug above, not window width; the widening was still worth keeping as a genuine latent risk for
+  any future window/timing parameter changes.
+- `nylab.regime.add_regime_features`'s `er10`: the numerator (a raw price difference) was being
+  divided by `day_range`, which `nylab.days.build_days` already stores in PIPS — silently
+  produced values ~5 orders of magnitude too small (~1e-5 instead of the expected 0–1
+  efficiency-ratio range). Fixed by converting the numerator to pips first.
+
+**Disclosed simplifications**: `silver_bullet_fvg` only ever acts on the FIRST qualifying MSS
+per window/day and only the FIRST FVG in that MSS's leg — a second candidate later in the same
+window is never considered even if the first one fails; `nylab.events_report` stays descriptive-
+only by design (see 7.3 above); `nylab.walkforward` does no per-fold parameter refitting (Phase
+7's models have no free parameters to tune) — "fresh model per fold" is walk-STATE isolation,
+not walk-forward optimization.
+
+**Verification**: 249/249 tests pass — 242 in the general suite (`pytest --ignore=tests/
+test_models_silver_bullet_fvg.py`, 112s) + 7 in `tests/test_models_silver_bullet_fvg.py` (run
+separately, 93s, since that file's 3 full-pipeline tests each rebuild the events table on the
+real 2-year fixture; nothing flaky, just wall-clock, split only to stay under this harness's own
+per-command timeout). New/changed modules: `nylab/structure.py`, `nylab/events.py`,
+`nylab/events_report.py`, `nylab/backtest.py`, `nylab/regime.py`, `nylab/walkforward.py`,
+`nylab/models/silver_bullet_fvg.py`, `nylab/models/london_sweep_reversal.py` (Model class
+appended), `nylab/config.py` (`ModelConfig.context_filter`), `nylab/days.py` (regime column
+registration), `config/features.yaml` (new), `config/models/silver_bullet_fvg_{lonsb,nyamsb,
+nypmsb}.yaml` (new). Ran `nylab.walkforward.run_walkforward` against the real 2-year fixture with
+`LondonSweepReversalModel` (120 IS / 30 OOS days, rolling) as an end-to-end sanity check: 13
+folds, ~6s, coherent output (negative pooled OOS expectancy, as expected on synthetic
+random-walk-shaped data with no real edge to find).
+
+**Not yet done**: the Accept line's "user hand-verifies 10 FVGs + 10 sweeps in replay review
+mode" is a manual step only Akash can perform in the replay UI — everything else in Phase 7's
+accept criteria (AT-01..04, truncation tests for every new feature) is done and passing.

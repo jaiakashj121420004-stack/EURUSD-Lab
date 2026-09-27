@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from nylab import hyp_dsl
+
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 
 
@@ -55,14 +57,33 @@ class ModelConfig:
     version: str
     params: dict
     description: str = ""
+    # ROADMAP 7.5 / SESSIONS_AND_CONTEXT.md S5.3: an optional DSL string a model's YAML can set
+    # so nylab.backtest.run_backtest_with_context_filter can report filtered/unfiltered/
+    # complement results without every caller re-parsing the YAML by hand.
+    context_filter: str | None = None
 
 
 def load_model(model_name: str) -> ModelConfig:
     raw = _load_yaml(f"models/{model_name}.yaml")
+    context_filter = raw.get("context_filter")
+    if context_filter is not None:
+        # Fail loudly at LOAD time (same discipline nylab.hyp_loader applies to hypothesis YAML
+        # condition/outcome strings) rather than lazily inside a backtest run -- a typo'd
+        # context_filter should never silently disable itself.
+        hyp_dsl.validate(hyp_dsl.parse(context_filter))
     return ModelConfig(name=raw["name"], version=str(raw["version"]), params=dict(raw["params"]),
-                        description=raw.get("description", ""))
+                        description=raw.get("description", ""), context_filter=context_filter)
 
 
 def load_prop(name: str = "prop.yaml") -> dict:
     """Maven account programs (verified, see config/prop.yaml header). Used from Phase 8."""
+    return _load_yaml(name)
+
+
+def load_features(name: str = "features.yaml") -> dict:
+    """ICT feature thresholds (FEATURES_SPEC.md, ROADMAP Phase 7) -- consumed by nylab.structure/
+    nylab.events/nylab.regime. Returned as a plain nested dict (not a dataclass, unlike
+    CostsConfig/ModelConfig above) because Phase 7's modules each read only a handful of nested
+    keys and a dataclass per sub-section would be a lot of boilerplate for little safety gain;
+    revisit if a caller starts passing a malformed dict silently."""
     return _load_yaml(name)

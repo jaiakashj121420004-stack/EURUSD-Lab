@@ -1,0 +1,12 @@
+# See silver_bullet_fvg_lonsb.yaml for the full rule description and why `window` is wider than
+# `kz_window` -- identical rules here, NY PM window.
+name: silver_bullet_fvg_nypmsb
+version: "1.0"
+description: "Silver Bullet (NY PM): same rules as silver_bullet_fvg_lonsb, run in the nypm_sb killzone."
+params:
+  kz_window: [14.0, 15.0]   # nypm_sb, config/windows.yaml
+  window: [14.0, 18.0]   # kz_hi(15.0) + mss_max_bars(2h) + entry_max_bars_after_mss(1h) = 18.0
+  entry_max_bars_after_mss: 12
+  stop_buffer_pips: 1.0
+  rr: 2.0
+  time_exit: 18.5

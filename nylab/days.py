@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from nylab import calendar_features
+from nylab import regime as regime_mod
 
 # ROADMAP 1.6: the latest NY hour (relative to td midnight) at which each DAY column's value is
 # known. Starting Phase 3, a hypothesis/model may only condition on a column whose
@@ -46,6 +47,9 @@ COLUMN_DOCS = {
 }
 COLUMN_DOCS.update(calendar_features.column_docs())  # ROADMAP 4.3: news columns join the
 # same look-ahead registry as everything else -- nylab.hyp_loader checks this dict, not two.
+COLUMN_DOCS.update(regime_mod.column_docs())  # ROADMAP 7.6: adr_ratio/er10/adx14_d1/
+# chop14_d1/realized_vol_pct join the same registry, same reasoning -- see nylab.regime's
+# module docstring for why all five are available_at_h=-7.
 
 # ROADMAP 5.7.2: the EARLIEST NY hour whose raw bars genuinely feed into each DAY column's
 # value -- as opposed to available_at_h (COLUMN_DOCS above), which is when the value is fully

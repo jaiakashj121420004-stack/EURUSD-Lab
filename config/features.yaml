@@ -1,0 +1,38 @@
+# ICT feature thresholds (FEATURES_SPEC.md). Every numeric default quoted in that doc lives here
+# so a threshold change is a config edit, not a code edit -- same discipline as windows.yaml/
+# costs.yaml. Consumed by nylab.structure / nylab.events / nylab.regime (ROADMAP Phase 7).
+
+pip: 0.0001
+
+swings:
+  n_m5: 2          # FEATURES_SPEC S4: fractal swing width on M5 (n bars each side)
+  n_m15: 2          # same width definition, applied to an M15-resampled series for "external" swings
+  structure_k: 5    # structure_score(k): number of trailing confirmed swings scored
+
+displacement:
+  k_disp: 1.3       # body >= k_disp * ATR(14)
+  body_ratio: 0.6   # body / (high-low) >= body_ratio
+
+fvg:
+  min_pips: 0.8
+  min_atr_mult: 0.15
+
+equal_levels:
+  lookback_bars: 48   # 4h on M5
+  tol_pips: 1.0        # eq_tol = max(tol_pips, tol_atr_mult * ATR)
+  tol_atr_mult: 0.1
+
+raid:
+  tol_pips: 0.1        # FEATURES_SPEC S3: "any trade-through"
+  k_back_bars: 6        # 30 min on M5: bars allowed to close back on the original side
+  break_close_pips: 3.0 # a close beyond the level by more than this reclassifies sweep -> break
+
+mss:
+  max_bars: 24          # FEATURES_SPEC S8: max bars from sweep extreme to the MSS close
+
+regime:
+  er10_days: 10
+  adx14_period: 14
+  chop14_period: 14
+  realized_vol_window_days: 20
+  realized_vol_pctile_lookback_days: 126
