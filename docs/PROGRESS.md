@@ -1032,3 +1032,46 @@ cache via `nylab run` now that the engine reports honestly, correctly-directed t
 re-labelled *descriptive*), 5.7.5 (new `negative` verdict word -- needs Akash's confirmation of
 the name per the ROADMAP's own note), 5.7.6 (AT-05 artifact-catching fixtures). `run_tests.bat`
 has not yet been verified on Akash's own laptop, only in this cloud-linked device session.
+
+## 2026-09-27 — Phase 5.7.4: re-run H013/H014 on real data, H015 relabelled descriptive
+
+**Re-ran `nylab run EURUSD_M5_2021-09-27_2026-09-25.csv --tz auto`** against the real 5-year
+cache with the fully fixed 5.7.3 engine (IS-only p, complement baseline, embargo, direction,
+effect-in-pips) -- this is the check that was still outstanding after 5.7.1-5.7.3 forced both
+hypotheses to v1.1 out of necessity rather than as a deliberate re-evaluation. Result confirms
+the 2026-09-26 review's prediction exactly:
+
+- **H013** (ADR used by 09:30 > 80% -> post-09:30 NY range): n=540, is_hit=0.462 vs
+  baseline=0.478, p=0.63, effect 43.4 vs 41.3 pips (cond vs complement) -- `noise`.
+- **H014** (Asia range bottom 20% -> NY range vs median): n=252, is_hit=0.558 vs
+  baseline=0.535, p=0.59, effect 55.5 vs 53.9 pips -- `noise`.
+
+Both match RESEARCH_PROTOCOL.md S3's already-recorded numbers closely (H013: IS +6pp/p=0.06,
+OOS +2pp/p=0.67, 43 vs 41 pips there was from an earlier partial check; this full run with the
+complete 5.7.3 engine lands in the same "noise" place).
+
+**H015 re-labelled descriptive.** `ny_takes_lon_high` and `ny_close` both have
+`available_at_h == 16`, the same as H015's own `decision_time_h` -- there's no earlier moment at
+which the condition (does NY raid the London high at any point this session) is knowable without
+the outcome (does it close back below it) already being known too, since "does NY raid the high
+at any point" is a whole-session summary only final at close. Title now reads "...(descriptive,
+not predictive)"; `notes:` spells out why. Still counts toward `m` and gets a verdict -- it's an
+honestly-reported test, just not a signal a trader could act on intraday.
+
+**Left un-flipped, flagged for Akash:** docs/JEV_INTEGRATION.md S6.1 (written against v0's buggy
+full-sample-quantile pipeline) predicted H013/H014 would BOTH turn out to point opposite their
+titles once fixed -- the volatility-clustering theory (busy begets busy, quiet begets quiet).
+Measured properly this time, they don't agree with each other: H013 leans that way
+(direction=opposite, p=0.63), H014 leans its own title's way (direction=as_claimed, p=0.59), and
+neither is remotely significant. Flipping either title to match one non-significant sign would be
+the same mistake this whole ticket exists to fix, just in the other direction. Wrote the full
+reasoning and both hypotheses' current numbers into their own `notes:` fields, left the objective
+`direction` column (computed fresh every run) as the honest record, and left the titles/outcome
+operators as originally ported. This is a judgment call, not a mechanical fix -- flagged to Akash
+to confirm or override before marking 5.7.4 fully `[x]` in the ROADMAP.
+
+**Verified:** full suite still 171/171 (title/notes-only YAML edits, no condition/outcome/version
+change, so no test impact expected or found).
+
+**Not yet done:** 5.7.5 (new `negative` verdict word -- needs Akash's confirmation of the name
+per the ROADMAP's own note) and 5.7.6 (AT-05 artifact-catching fixtures).

@@ -11,8 +11,23 @@ notes: >-
   47% of 2024's days but 3% of 2022's (RESEARCH_PROTOCOL.md S3, ROADMAP 5.7.1). v1.1 swaps in
   quantile_prior() (rolling 60-prior-day window) so the threshold only ever uses data a trader
   actually had on the decision day. v1.0's ledger rows (research/ledger.csv) are untouched --
-  this is a NEW (id, version) pair, m += 1, not a rewrite of history. Still pending (ROADMAP
-  5.7.2/5.7.4) -- the outcome `ny_range` itself spans 07:00-16:00 even though decision_time_h=0,
-  so this v1.1 does not yet fix the separate outcome-window-overlap issue -- that needs the
-  clean post-decision `r0930_1600`-style columns 5.7.2 adds, and is deferred to the full v1.1
-  outcome re-issue (5.7.4) rather than bundled into this narrower 5.7.1 condition fix.
+  this is a NEW (id, version) pair, m += 1, not a rewrite of history. The separate outcome-window
+  concern flagged here in an earlier draft doesn't actually apply: decision_time_h=0 (midnight),
+  and `ny_range`'s window starts at 07:00, so the whole outcome is already post-decision --
+  ROADMAP 5.7.2's `_check_outcome_window()` confirms this (7 is not < 0), so no `r0930_1600`-style
+  swap is needed here the way H013 needed one.
+
+  ROADMAP 5.7.4 direction note (2026-09-27, re-run against the real 5-yr cache with the fully
+  fixed 5.7.3 engine): docs/JEV_INTEGRATION.md S6.1 flagged this title as pointing the WRONG way
+  under v0's buggy pipeline (old full-sample-quantile numbers showed quiet Asia followed by a
+  BELOW-median NY range ~68% of the time -- volatility clustering, the opposite of this title),
+  and asked for "correctly-directed titles" once the engine was fixed. Measured properly with
+  quantile_prior() and the 5.7.3 engine: n=252, is_hit=0.558 vs baseline=0.535, p=0.59, verdict
+  noise, direction=as_claimed (i.e. this run's IS data leans the title's own way, not the
+  volatility-clustering way S6.1's old numbers suggested) -- but p=0.59 means that lean is also
+  indistinguishable from chance. The two hypotheses' properly-measured signs now point in
+  DIFFERENT directions from each other and from the old S6.1 finding, which is exactly what pure
+  noise looks like. Left the title/outcome operator AS-IS for the same reason as H013's note:
+  chasing either this run's sign or the old buggy pipeline's sign would both be overfitting to
+  noise. The `direction` field is the honest per-run record; see hypotheses.csv rather than this
+  title's wording. Flagged for Akash alongside H013.

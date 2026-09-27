@@ -1,10 +1,21 @@
 id: H015
 version: '1.0'
-title: NY raids London high -> NY closes back below it
+title: 'NY raids London high -> NY closes back below it (descriptive, not predictive)'
 decision_time_h: 16
 condition: ny_takes_lon_high
 outcome: ny_close < lon_high
 baseline_p0: 0.5
-notes: Ported from v0/nylab.hypotheses H015. v0 special-cased this hypothesis's baseline
-  to a literal 50% coin-flip null rather than deriving one from a column -- baseline_p0
-  makes that explicit instead of re-deriving it from an expression.
+notes: >-
+  Ported from v0/nylab.hypotheses H015. v0 special-cased this hypothesis's baseline to a literal
+  50% coin-flip null rather than deriving one from a column -- baseline_p0 makes that explicit
+  instead of re-deriving it from an expression.
+
+  ROADMAP 5.7.4 (2026-09-27): re-labelled descriptive rather than predictive. `ny_takes_lon_high`
+  and `ny_close` (COLUMN_DOCS) both have `available_at_h == 16`, the same as this hypothesis's own
+  `decision_time_h` -- meaning the "decision" point IS the moment the outcome is already fully
+  resolved. There is no earlier decision time at which `ny_takes_lon_high` (whether NY raids the
+  London high at ANY point during the session) can be known -- it's a whole-session summary, only
+  final at session close. So this isn't a trader ever acting on a signal before an outcome: by the
+  time you'd know the condition, you already know the outcome too. It stays in the ledger as a
+  genuine, honestly-reported test (still counts toward m, still gets a verdict), but the title now
+  says plainly that it describes a same-time correlation, not something actionable intraday.

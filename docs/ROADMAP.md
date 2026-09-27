@@ -189,14 +189,28 @@ The machinery must make these mistakes impossible, not just fixed once.
       (171 tests) green.
 - [~] 5.7.4 Re-issue H013/H014 as **v1.1** with prior-only thresholds, post-09:30 outcomes and
       correctly-directed titles (m += 2). H015 re-labelled *descriptive* (decision 16:00 = outcome time,
-      nothing left to predict). Expected result from the 2026-09-26 check: both noise. Partly done:
-      H013 v1.1 (outcome -> `r0930_1600`, 2026-09-27, forced by 5.7.2) and H014 v1.1 (condition ->
-      `quantile_prior`, 2026-09-27, forced by 5.7.1) both landed already, out of necessity rather
-      than as this ticket's own deliberate step -- neither hypothesis has been RE-RUN against the
-      real 5-year cache yet to see if the effect is still noise as the 2026-09-26 review predicted
-      (that needs `nylab run` against the real cache, not just the synthetic-fixture test suite),
-      and titles/H015-relabelling are still untouched. Left as `[~]` rather than `[x]` for that
-      reason.
+      nothing left to predict). Expected result from the 2026-09-26 check: both noise. Done
+      2026-09-27: re-ran `nylab run EURUSD_M5_2021-09-27_2026-09-25.csv --tz auto` against the real
+      5-year cache with the fully fixed 5.7.3 engine -- both H013 (n=540, is_hit 0.462 vs baseline
+      0.478, p=0.63) and H014 (n=252, is_hit 0.558 vs baseline 0.535, p=0.59) come out `noise`,
+      confirming the 2026-09-26 review's prediction. H015 re-titled to flag it as descriptive: its
+      `notes:` now spells out that `ny_takes_lon_high`/`ny_close` both have `available_at_h == 16`
+      == its own `decision_time_h`, so there's no earlier point at which the condition is knowable
+      without the outcome already being known too -- it stays in the ledger (still counts toward
+      m, still gets a verdict) but the title now says plainly it's a same-time correlation, not an
+      intraday signal. Left as `[~]` rather than `[x]` for one remaining judgment call: the
+      "correctly-directed titles" part. docs/JEV_INTEGRATION.md S6.1 (written against v0's buggy
+      pipeline) predicted both hypotheses would turn out to point the opposite way from their
+      titles (volatility clustering -- busy begets busy, quiet begets quiet) -- but measured
+      properly, H013 leans that way (direction=opposite, p=0.63) while H014 leans its own title's
+      way instead (direction=as_claimed, p=0.59), and neither is significant. Two non-significant
+      results pointing in different directions from each other and from S6.1's old finding is what
+      noise looks like, so flipping either title to chase a sign would repeat the exact mistake
+      this ticket exists to fix. Left both titles/outcome operators as-is, with the reasoning and
+      the current numbers written into each YAML's `notes:` and the objective, computed-fresh-
+      every-run `direction` column left as the honest record -- flagged for Akash to confirm he's
+      OK with that call (or wants the titles reworded to the volatility-clustering direction
+      regardless of significance) before this line goes to `[x]`.
 - [ ] 5.7.5 Model verdict: OOS n ≥ 100 and CI upper < 0 → `negative` (new verdict word, Akash to
       confirm). `london_sweep_reversal` v1.0 becomes `negative`.
 - [ ] 5.7.6 **Artifact-catching fixtures** (the mistake-proofing): a synthetic 5-yr series with two

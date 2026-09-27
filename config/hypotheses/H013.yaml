@@ -15,3 +15,19 @@ notes: >-
   for this fix) so the outcome only measures price action a trader could not have already
   priced in when the decision was made. v1.0's ledger rows (research/ledger.csv) are untouched
   -- this is a NEW (id, version) pair, m += 1, not a rewrite of history.
+
+  ROADMAP 5.7.4 direction note (2026-09-27, re-run against the real 5-yr cache with the fully
+  fixed 5.7.3 engine): docs/JEV_INTEGRATION.md S6.1 flagged this title as pointing the WRONG way
+  under v0's buggy pipeline -- the theory being volatility clustering (a busy pre-NY session is
+  followed by a busy, not quiet, NY session), and asked for "correctly-directed titles" once the
+  engine was fixed. Measured properly (IS-only p, complement baseline, 5-td embargo): n=540,
+  is_hit=0.462 vs baseline=0.478, p=0.63, verdict noise, direction=opposite (i.e. this run's IS
+  data leans the volatility-clustering way, condition days are LESS often below-median, matching
+  S6.1's theory) -- but p=0.63 means that lean is indistinguishable from chance on this data. Left
+  the title/outcome operator AS-IS rather than flipping to match this run's (non-significant)
+  sign: flipping a title to chase one run's noise would be the same mistake in the other
+  direction. The `direction` field (opposite/as_claimed, computed fresh every run) is the honest,
+  non-stale record of which way the data leans -- see that column in hypotheses.csv rather than
+  trusting this title's wording either way. Flagged for Akash: if he'd rather the title itself be
+  reworded to state the volatility-clustering direction regardless of significance, that's a
+  one-line change (title + outcome operator flip), his call.
