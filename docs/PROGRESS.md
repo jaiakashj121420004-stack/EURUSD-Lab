@@ -719,6 +719,28 @@ review sample generated, second review round pending), 6 Replay trainer v2, 7 IC
 models, 8 Verification/robustness/prop simulation, 9 Daily automation, 10 Research loop
 (ongoing).
 
+## 2026-09-27 (later) — label-validation round 4: <15 days, "normal" dropped from review
+
+Akash, on seeing round 3 land at 34 days instead of the promised <20: "i want it to have less
+than 15 days of testing and i think normal should be removed." Two changes:
+
+1. **Greedy set-cover floor** (`_stratified_floor_greedy`) replaces the old independent-per-
+   requirement floor for the curated strategy: same "every occurring label gets >=1 reviewed
+   day" guarantee, but exploits real overlap (one day can satisfy several session/label
+   requirements at once) -- 7 days instead of 28 on the real 5-year cache, verified by a
+   brute-force test confirming 7 really is the minimum, not just what greedy happened to find.
+   `sample_days()` (rounds 1-2, `--strategy random`) is untouched.
+2. **"normal"/"normal_day" dropped from the floor requirement and never rendered as a
+   reviewable row** -- Akash has said plainly he can't judge the catch-all ("normal is not
+   well defined imo"). The glossary still explains what they mean; they're just annotated as
+   not shown for review. A curated-fill candidate whose every label is "normal"/"normal_day"
+   is filtered out before selection so no slot is wasted on a day with nothing to review.
+
+New defaults: `--n 14 --seed 44`. Verified on the real cache: floor=7, final=14 days, 91 real
+reviewable rows, zero wasted (all-normal) days, zero "normal"/"normal_day" answer keys baked
+into the generated page. 142/142 tests pass. `sample_44.html` sent to Akash for round 4.
+
+
 ## 2026-09-27 — design system approved + label-validation round 3 (curated near-threshold sampling)
 
 **Design system approved.** `design/preview.html` (rejected once earlier, rebuilt, now approved by
