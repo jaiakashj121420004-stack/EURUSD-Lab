@@ -3,7 +3,7 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 5.7 (statistics integrity) DONE, 5.7.1 through 5.7.6 -- prior-only DSL thresholds; starts_at_h + post-decision outcome column; IS-only p/complement baseline/embargo/direction/effect-in-pips engine rewrite; H013/H014 re-run + H015 relabelled descriptive; `negative` model verdict; AT-05 artifact-catching fixtures. `run_tests.bat` still needs verifying on Akash's own laptop. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR). Design restyle of the replay trainer + research report is next (deferred until 5.7 was fully done, per Akash's own rule against mixing design-system commits with ROADMAP work).
+## Status: Phase 5.7 (statistics integrity) DONE AND VERIFIED, 5.7.1 through 5.7.6 -- prior-only DSL thresholds; starts_at_h + post-decision outcome column; IS-only p/complement baseline/embargo/direction/effect-in-pips engine rewrite; H013/H014 re-run + H015 relabelled descriptive; `negative` model verdict; AT-05 artifact-catching fixtures. `run_tests.bat` confirmed 2026-09-27 on Akash's own laptop (176 passed). Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR). Design restyle of the replay trainer + research report is next (deferred until 5.7 was fully done, per Akash's own rule against mixing design-system commits with ROADMAP work).
 
 Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
 call: keep building through the phases on the automated tests alone, and he'll sit down and look
@@ -1145,4 +1145,7 @@ pass: AT-01/AT-02 in `tests/test_hyp_engine_at.py` (re-confirmed after the 5.7.3
 fixture strengthening needed), AT-03 in `tests/test_nylab_phase1.py`'s truncation tests, AT-04 by
 `nylab run`'s own wall-clock (~30s on the real 5-yr cache, well under the 90s budget), AT-05 in
 the new file above. Full suite 176/176. **Not yet done:** `run_tests.bat` has not been verified
-on Akash's own laptop -- only in this cloud-linked device session.
+on Akash's own laptop -- only in this cloud-linked device session -- CONFIRMED 2026-09-27 by Akash on his own laptop:
+`run_tests.bat` (python 3.14.6, pandas 3.0.6, numpy 2.5.3) reports "176 passed in 148.50s" and
+"All tests passed on this machine." Phase 5.7 is now verified on both the cloud-linked device
+session and Akash's real hardware.

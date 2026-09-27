@@ -248,8 +248,10 @@ The machinery must make these mistakes impossible, not just fixed once.
 `tests/test_nylab_phase1.py`'s truncation tests, AT-04 by `nylab run`'s own ~30s wall-clock on the
 real 5-yr cache well under the 90s budget, AT-05 in `tests/test_hyp_engine_at05.py`); AT-02's
 planted edge still reaches `survives-oos` with IS-only p (confirmed after the 5.7.3 rewrite, no
-fixture strengthening needed); `run_tests.bat` has not yet been verified on Akash's own laptop,
-only in this cloud-linked device session.
+fixture strengthening needed); `run_tests.bat` CONFIRMED 2026-09-27 on Akash's own laptop
+(python 3.14.6, pandas 3.0.6, numpy 2.5.3): "176 passed in 148.50s", "All tests passed on this
+machine." **Phase 5.7 is fully done and verified on both the cloud-linked device session and
+Akash's real hardware.**
 
 ## Phase 5.8 — Environment pinning (partly done 2026-09-26)
 - [x] 5.8.1 pandas-3 crashes fixed (`sessions._news_for_window`, `cross_session.combined_label`);
