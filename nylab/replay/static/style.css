@@ -264,3 +264,59 @@ tr.dayRow.spoiler {
   transition: transform var(--t-fast) var(--ease-glide), opacity var(--t-fast) var(--ease-glide);
 }
 .tooltip-pop.open { transform: scale(1); opacity: 1; pointer-events: auto; }
+
+/* ---------------------------------------------------------------- ROADMAP 6.1/6.2/6.4/6.5/6.6/6.7
+   Phase 6 additions: filter groups, spoiler badge, news strip, review panel, challenge banner,
+   stats drawer. Reuses every existing token/elevation class -- no new colors invented. */
+.iconBtn {
+  display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+  border-radius: var(--radius-pill); background: var(--base); color: var(--text-2); border: none;
+  box-shadow: 3px 3px 7px var(--shadow-dark), -3px -3px 7px var(--shadow-light); cursor: pointer;
+}
+.iconBtn svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; }
+
+.filterGroup { margin: 8px 0; border-radius: var(--radius-card); padding: 6px 8px; background: rgba(var(--text-3-rgb), .05); }
+.filterGroup summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.filterGroup label { flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; }
+.charFilterRow { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+.charFilterRow label { min-width: 62px; font-size: 12px; color: var(--text-3); }
+.charSelect { flex: 1; font-size: 12px; }
+#fDslError:empty { display: none; }
+
+.spoilerBadge {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--amber);
+  background: rgba(var(--amber-rgb), .14); border-radius: var(--radius-pill); padding: 1px 8px;
+  margin-left: 6px; font-weight: 600;
+}
+
+#newsStrip { display: flex; gap: 6px; padding: 0 14px; overflow-x: auto; font-size: 11px; min-height: 0; }
+#newsStrip:empty { display: none; }
+.newsChip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--radius-pill);
+  background: rgba(var(--accent-rgb), .12); color: var(--text-2); white-space: nowrap; flex-shrink: 0;
+}
+.newsChip.pending { background: rgba(var(--text-3-rgb), .12); color: var(--text-3); }
+.newsChip.surprise-up { background: rgba(var(--bull-rgb), .16); color: var(--bull); }
+.newsChip.surprise-down { background: rgba(var(--bear-rgb), .16); color: var(--bear); }
+
+#reviewPanel {
+  position: absolute; right: 12px; bottom: 12px; width: min(360px, 90%); max-height: 70%;
+  overflow-y: auto; padding: 14px 16px; border-radius: var(--radius-card); z-index: 5;
+}
+#reviewPanel h4 { margin: 10px 0 4px; color: var(--text-1); font-size: 13px; }
+#reviewPanel table { font-size: 12px; }
+#reviewPanel .closeBtn { float: right; }
+
+#challengeBanner {
+  display: flex; align-items: center; gap: 14px; padding: 8px 16px; margin: 0 16px; border-radius: var(--radius-card);
+}
+#challengeBanner #challengeStatus { flex: 1; font-size: 13px; font-weight: 600; color: var(--text-1); }
+
+#statsPanel {
+  position: fixed; top: 53px; bottom: 0; right: 0; width: min(380px, 92vw); z-index: 75;
+  transform: translateX(105%); transition: transform var(--t-med) var(--ease-glide);
+  border-radius: var(--radius-island) 0 0 var(--radius-island); padding: 14px 16px; overflow-y: auto;
+}
+#statsPanel.open { transform: translateX(0); box-shadow: -8px 0 24px var(--shadow-dark); }
+#statsBody table { font-size: 12px; margin: 6px 0 14px; }
+#statsBody h4 { margin: 10px 0 4px; }

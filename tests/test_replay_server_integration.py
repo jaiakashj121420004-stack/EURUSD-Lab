@@ -48,8 +48,11 @@ def running_server():
 
 
 def _get(base, path):
-    with urllib.request.urlopen(f"{base}{path}", timeout=3) as r:
-        return r.status, r.read()
+    try:
+        with urllib.request.urlopen(f"{base}{path}", timeout=3) as r:
+            return r.status, r.read()
+    except HTTPError as e:
+        return e.code, e.read()
 
 
 def test_static_files_served(running_server):
@@ -61,8 +64,9 @@ def test_static_files_served(running_server):
 
 def test_days_and_bars_and_levels_endpoints(running_server):
     status, body = _get(running_server, "/api/days?exclude_thin=false")
-    days = json.loads(body)
-    assert status == 200 and len(days) > 100
+    payload = json.loads(body)
+    days = payload["days"]
+    assert status == 200 and payload["count"] > 100 and len(days) > 100
     td = days[10]["date"]
 
     status, body = _get(running_server, f"/api/bars?td={td}&tf=M5&until={td}T09:30:00")
@@ -92,6 +96,67 @@ def _post(base, path, payload):
     )
     with urllib.request.urlopen(req, timeout=3) as r:
         return r.status, json.loads(r.read())
+
+
+def test_bad_day_filter_returns_400(running_server):
+    """api.DayFilterError (unknown DSL column, missing session-character column, ...) must come
+    back as a clean 400 with a message, not a bare 500."""
+    import urllib.parse
+    q = urllib.parse.urlencode({"dsl": "totally_made_up_column_xyz > 0"})
+    status, body = _get(running_server, f"/api/days?{q}")
+    assert status == 400
+    assert "totally_made_up_column_xyz" in json.loads(body)["error"]
+
+
+def test_days_filter_by_raid_flag_over_http(running_server):
+    status, body = _get(running_server, "/api/days?exclude_thin=false&raids=ny_takes_lon_high&hide_outcome=false")
+    payload = json.loads(body)
+    assert status == 200
+    assert payload["spoiler_filter_used"] is True
+    assert all(r["outcome"]["ny_takes_lon_high"] for r in payload["days"])
+
+
+def test_days_default_hides_outcome_columns_over_http(running_server):
+    status, body = _get(running_server, "/api/days?exclude_thin=false")
+    payload = json.loads(body)
+    assert status == 200
+    assert all(r["outcome"] is None for r in payload["days"][:20])
+
+
+def test_journal_endpoints_round_trip(running_server):
+    """POST a trade, then GET /api/journal and /api/journal/stats and see it reflected."""
+    status, result = _post(running_server, "/api/journal/append", {
+        "td": "2024-01-15", "side": "long", "entry": 1.1000, "sl": 1.0990, "tp": 1.1020,
+        "exit": 1.1020, "reason": "target", "risk_pips": 10, "R_gross": 2.0, "R_net": 1.9,
+        "setup_tag": "london_sweep", "rules_followed": "Y", "emotion": 3, "notes": "test trade",
+        "preset": "", "challenge": "",
+    })
+    assert status == 200 and result["ok"] is True
+
+    status, body = _get(running_server, "/api/journal")
+    rows = json.loads(body)
+    assert status == 200 and any(r["setup_tag"] == "london_sweep" for r in rows)
+
+    status, body = _get(running_server, "/api/journal/stats")
+    stats = json.loads(body)
+    assert status == 200
+    assert stats["n_trades"] >= 1
+    assert any(g["group"] == "london_sweep" for g in stats["by_setup_tag"])
+
+
+def test_presets_save_list_and_delete(running_server):
+    status, result = _post(running_server, "/api/presets", {"name": "test_preset_xyz", "weekdays": [0, 1]})
+    assert status == 200 and result["ok"] is True
+
+    status, body = _get(running_server, "/api/presets")
+    presets = json.loads(body)
+    assert status == 200 and any(p["name"] == "test_preset_xyz" for p in presets)
+
+    status, result = _post(running_server, "/api/presets/delete", {"name": "test_preset_xyz"})
+    assert status == 200 and result["ok"] is True
+    status, body = _get(running_server, "/api/presets")
+    presets = json.loads(body)
+    assert not any(p["name"] == "test_preset_xyz" for p in presets)
 
 
 def test_sim_pending_fill_and_compute_r_endpoints(running_server):

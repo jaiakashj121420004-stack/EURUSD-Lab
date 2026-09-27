@@ -273,7 +273,9 @@ def main():
     p_replay.add_argument("--host", default="127.0.0.1")
     p_replay.add_argument("--port", type=int, default=8765)
     p_replay.add_argument("--no-browser", dest="open_browser", action="store_false")
-    p_replay.set_defaults(func=lambda a: replay_server.serve(a.cache_dir, a.host, a.port, a.open_browser))
+    p_replay.add_argument("--calendar", default="data/calendar.parquet",
+                           help="ROADMAP 6.5: calendar cache for news markers; missing file is fine, news just stays empty")
+    p_replay.set_defaults(func=lambda a: replay_server.serve(a.cache_dir, a.host, a.port, a.open_browser, a.calendar))
 
     p_hyp = sub.add_parser("hypothesis", help="scaffold a new hypothesis YAML file (ROADMAP 3.6)")
     hyp_sub = p_hyp.add_subparsers(dest="hyp_command", required=True)

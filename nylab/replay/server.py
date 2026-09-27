@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import csv
 import json
+import math
 import os
 import sys
 import webbrowser
@@ -18,8 +19,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from nylab import cache as cache_mod
+from nylab import calendar_io
 from nylab import config as cfg
-from nylab.replay import api, sim
+from nylab.replay import api, journal_stats, sim
 
 STATIC_DIR = Path(__file__).parent / "static"
 JOURNAL_CSV = Path("research/replay/trades.csv")
@@ -28,6 +30,9 @@ PRESETS_JSON = Path("research/replay/presets.json")
 JOURNAL_COLUMNS = [
     "logged_at", "td", "side", "entry", "sl", "tp", "exit", "reason",
     "risk_pips", "R_gross", "R_net", "setup_tag", "rules_followed", "emotion", "notes",
+    "preset", "challenge",  # ROADMAP 6.3/6.6/6.7: which saved filter preset (if any) and
+    # whether this trade was placed during a Challenge-mode run -- both optional, blank for
+    # ordinary free-practice trades, used by the Stats tab (6.7) and the challenge report (6.6).
 ]
 
 
@@ -39,13 +44,58 @@ def _content_type(path: Path) -> str:
     }.get(path.suffix, "application/octet-stream")
 
 
+def _json_safe(obj):
+    """Recursively replaces NaN/Infinity with None -- Python's json module happily emits the
+    non-standard `NaN`/`Infinity` tokens (nylab.stats.r_stats can produce both, e.g. sqn when
+    stdev is 0), which is NOT valid JSON and breaks the browser's JSON.parse. Every API response
+    goes through this so a stats/edge-case value never silently breaks the frontend."""
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
+def _parse_bool(v, default):
+    if v is None:
+        return default
+    return v.lower() not in ("false", "0", "no")
+
+
+def _parse_days_query(q: dict) -> dict:
+    """REPLAY_TRAINER.md S3 filters -> nylab.replay.api.list_days() kwargs. Every filter is
+    optional -- an absent query param means "don't filter on this", not "filter to nothing"."""
+    kwargs = dict(
+        date_from=q.get("from"), date_to=q.get("to"),
+        weekdays=[int(x) for x in q["weekdays"].split(",")] if q.get("weekdays") else None,
+        exclude_thin=_parse_bool(q.get("exclude_thin"), True),
+        hide_outcome=_parse_bool(q.get("hide_outcome"), True),
+        news_flags=q["news"].split(",") if q.get("news") else None,
+        raid_flags=q["raids"].split(",") if q.get("raids") else None,
+        adr_min=float(q["adr_min"]) if q.get("adr_min") else None,
+        adr_max=float(q["adr_max"]) if q.get("adr_max") else None,
+        dsl=q.get("dsl") or None,
+    )
+    # Session-character filters arrive as char_<session_id>=chop,quiet (one query param per
+    # session id, since sessions and their allowed characters are both open-ended lists).
+    session_character = {}
+    for key, val in q.items():
+        if key.startswith("char_") and val:
+            session_character[key[len("char_"):]] = val.split(",")
+    if session_character:
+        kwargs["session_character"] = session_character
+    return kwargs
+
+
 def make_handler(store: api.Store, thin_flags):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass  # keep the console quiet; errors still raise
 
         def _json(self, obj, status=200):
-            body = json.dumps(obj, default=str).encode("utf-8")
+            body = json.dumps(_json_safe(obj), default=str).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -71,9 +121,7 @@ def make_handler(store: api.Store, thin_flags):
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
             try:
                 if u.path == "/api/days":
-                    weekdays = [int(x) for x in q["weekdays"].split(",")] if q.get("weekdays") else None
-                    exclude_thin = q.get("exclude_thin", "true").lower() != "false"
-                    self._json(api.list_days(store, q.get("from"), q.get("to"), weekdays, exclude_thin, thin_flags))
+                    self._json(api.list_days(store, thin_flags=thin_flags, **_parse_days_query(q)))
                 elif u.path == "/api/bars":
                     self._json(api.get_bars(store, q["td"], q.get("tf", "M5"), q["until"],
                                              int(q.get("context_days", 10))))
@@ -88,10 +136,16 @@ def make_handler(store: api.Store, thin_flags):
                         self._json(json.loads(PRESETS_JSON.read_text()))
                     else:
                         self._json([])
+                elif u.path == "/api/journal":
+                    self._json(self._read_journal())
+                elif u.path == "/api/journal/stats":
+                    self._json(journal_stats.build(self._read_journal_df()))
                 elif u.path.startswith("/api/"):
                     self._json({"error": f"unknown endpoint {u.path}"}, 404)
                 else:
                     self._static(u.path)
+            except api.DayFilterError as e:
+                self._json({"error": str(e)}, 400)
             except KeyError as e:
                 self._json({"error": f"missing required parameter: {e}"}, 400)
             except Exception as e:  # noqa: BLE001
@@ -129,6 +183,9 @@ def make_handler(store: api.Store, thin_flags):
                 elif u.path == "/api/presets":
                     self._save_preset(payload)
                     self._json({"ok": True})
+                elif u.path == "/api/presets/delete":
+                    self._delete_preset(payload)
+                    self._json({"ok": True})
                 else:
                     self._json({"error": f"unknown endpoint {u.path}"}, 404)
             except KeyError as e:
@@ -147,6 +204,17 @@ def make_handler(store: api.Store, thin_flags):
                 out["logged_at"] = datetime.now(timezone.utc).isoformat()
                 w.writerow(out)
 
+        def _read_journal(self) -> list[dict]:
+            if not JOURNAL_CSV.exists():
+                return []
+            with open(JOURNAL_CSV, newline="", encoding="utf-8") as f:
+                return list(csv.DictReader(f))
+
+        def _read_journal_df(self):
+            import pandas as pd
+            rows = self._read_journal()
+            return pd.DataFrame(rows) if rows else pd.DataFrame(columns=JOURNAL_COLUMNS)
+
         def _save_screenshot(self, payload: dict):
             SHOTS_DIR.mkdir(parents=True, exist_ok=True)
             data_url = payload["png_base64"]
@@ -162,10 +230,18 @@ def make_handler(store: api.Store, thin_flags):
             presets.append(payload)
             PRESETS_JSON.write_text(json.dumps(presets, indent=2))
 
+        def _delete_preset(self, payload: dict):
+            if not PRESETS_JSON.exists():
+                return
+            presets = json.loads(PRESETS_JSON.read_text())
+            presets = [p for p in presets if p.get("name") != payload.get("name")]
+            PRESETS_JSON.write_text(json.dumps(presets, indent=2))
+
     return Handler
 
 
-def serve(cache_dir: str = "data/cache", host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True):
+def serve(cache_dir: str = "data/cache", host: str = "127.0.0.1", port: int = 8765,
+          open_browser: bool = True, calendar_path: str = "data/calendar.parquet"):
     cache_path = Path(cache_dir)
     if not (cache_path / "bars_M5.parquet").exists():
         sys.exit(
@@ -173,7 +249,15 @@ def serve(cache_dir: str = "data/cache", host: str = "127.0.0.1", port: int = 87
             f"(it writes the parquet cache the replay trainer reads)."
         )
     bars, days = cache_mod.load(cache_dir)
-    store = api.Store(bars, days)
+
+    cal = None
+    if calendar_path and os.path.exists(calendar_path):
+        try:
+            cal = calendar_io.load_cache(calendar_path)
+        except Exception as e:  # noqa: BLE001 -- a bad/stale calendar file must not crash the trainer
+            print(f"  WARNING: could not load calendar cache {calendar_path} ({e}) -- news markers disabled.")
+            cal = None
+    store = api.Store(bars, days, cal=cal)
 
     from nylab.data import quality
     thin_flags = quality.flag_days(bars, days["day_range"])
@@ -183,6 +267,7 @@ def serve(cache_dir: str = "data/cache", host: str = "127.0.0.1", port: int = 87
     url = f"http://{host}:{port}"
     print(f"EURUSD Session Research Lab -- replay trainer running at {url}")
     print(f"  {len(days)} trading days loaded from {cache_path}/ (offline, no internet needed)")
+    print(f"  news calendar: {'loaded, ' + str(len(cal)) + ' events' if cal is not None else 'not loaded (no news markers)'}")
     print("  Ctrl+C to stop.")
     if open_browser:
         webbrowser.open(url)

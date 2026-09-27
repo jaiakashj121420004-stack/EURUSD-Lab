@@ -96,12 +96,52 @@ def test_higher_tf_matches_resample_of_revealed_bars(store):
 
 
 def test_day_filters_are_correct(store):
-    rows = api.list_days(store, weekdays=[0], exclude_thin=False)
+    rows = api.list_days(store, weekdays=[0], exclude_thin=False)["days"]
     assert all(r["weekday"] == 0 for r in rows)
-    lon_high_rows = api.list_days(store, exclude_thin=False)
-    lon_high_rows = [r for r in lon_high_rows if r["ny_takes_lon_high"]]
+    all_rows = api.list_days(store, exclude_thin=False, hide_outcome=False)["days"]
+    lon_high_rows = [r for r in all_rows if r["outcome"]["ny_takes_lon_high"]]
     expected = int(store.days["ny_takes_lon_high"].sum())
     assert len(lon_high_rows) == expected
+
+
+def test_hide_outcome_blanks_outcome_columns(store):
+    """ROADMAP 6.2: default hide_outcome=True must not leak day_range/character/raid data into
+    the navigator table, and hide_outcome=False must show it."""
+    hidden = api.list_days(store, exclude_thin=False)["days"]
+    assert all(r["outcome"] is None for r in hidden)
+    shown = api.list_days(store, exclude_thin=False, hide_outcome=False)["days"]
+    assert any(r["outcome"] is not None for r in shown)
+
+
+def test_raid_filter_sets_spoiler_flag(store):
+    result = api.list_days(store, exclude_thin=False, raid_flags=["ny_takes_lon_high"])
+    assert result["spoiler_filter_used"] is True
+    assert all(store.days.loc[pd.Timestamp(r["date"]), "ny_takes_lon_high"] for r in result["days"])
+
+
+def test_plain_filters_do_not_set_spoiler_flag(store):
+    result = api.list_days(store, exclude_thin=False, weekdays=[0, 1])
+    assert result["spoiler_filter_used"] is False
+
+
+def test_dsl_filter_matches_manual_mask(store):
+    result = api.list_days(store, exclude_thin=False, dsl="ny_takes_lon_high and not ny_takes_lon_low")
+    expected = store.days[store.days["ny_takes_lon_high"] & ~store.days["ny_takes_lon_low"].fillna(False)]
+    assert result["count"] == len(expected)
+    assert result["spoiler_filter_used"] is True
+
+
+def test_dsl_filter_rejects_unknown_column(store):
+    with pytest.raises(api.DayFilterError):
+        api.list_days(store, exclude_thin=False, dsl="totally_made_up_column > 0")
+
+
+def test_session_character_filter_errors_cleanly_without_session_columns(store):
+    """The test fixture's `store` only ran days_mod.build_days() (no Phase 5 session tables
+    attached), so `lon_character` genuinely doesn't exist -- must raise a clean DayFilterError,
+    not a bare KeyError, so the frontend can show a real message."""
+    with pytest.raises(api.DayFilterError):
+        api.list_days(store, exclude_thin=False, session_character={"lon": ["chop"]})
 
 
 def test_date_jump_is_fast(store):

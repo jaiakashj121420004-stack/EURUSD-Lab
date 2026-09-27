@@ -1168,3 +1168,115 @@ presets) are still open and unstarted.
 No pytest coverage changed (front-end JS, not exercised by the Python suite) — 176/176 still
 pass. This needs Akash to confirm visually: toggle blind mode in the replay trainer and check the
 day table no longer shows real NY/Lon range numbers.
+
+## 2026-09-27 — Phase 6 (Replay trainer v2) done end to end
+
+Implemented all of ROADMAP 6.1-6.7 in one pass:
+
+- **6.1 Filters**: `nylab.replay.api.list_days()` now takes `session_character`, `news_flags`,
+  `raid_flags`, `adr_min`/`adr_max`, and a free-text `dsl` expression, on top of the existing
+  date/weekday/thin-day filters. Every filter checks the relevant column exists first and raises
+  a clean `DayFilterError` (surfaced as HTTP 400, not a 500) rather than crashing on a cache built
+  without sessions/calendar attached. The advanced DSL field reuses `nylab.hyp_dsl.evaluate()`
+  (with `parse()`/`validate()`/`referenced_columns()` for error messages and spoiler detection)
+  directly against the cached days dataframe -- the exact same expression language and evaluator
+  hypothesis conditions use, not a second implementation.
+- **6.2 Hide-outcome / blind mode**: `OUTCOME_COLUMNS` is built programmatically from
+  `sessions.SESSION_IDS` plus day_type/ranges/raid-flags/realized-news columns, so a new session
+  id is automatically covered without a code change here. `NEWS_SCHEDULE_FLAGS` (has_nfp, has_cpi,
+  has_fomc, has_ecb, red_usd_0830, red_eur_london) are explicitly excluded from outcome columns,
+  since a real economic calendar shows scheduled events in advance -- that's not a spoiler.
+  `list_days()` reports `spoiler_filter_used` so the UI can show `#spoilerBadge` distinguishing
+  "filtered on hidden data" from "filtered on schedule-known data." Default hide-outcome view
+  shows "--" placeholders without hatching the row (this was a real early bug I caught and fixed
+  during this same pass: an initial version hatched every row whenever hide-outcome was on, which
+  would have made the DEFAULT view look permanently blind); actual blind mode adds the `.spoiler`
+  hatch class and masks the Date too. This closes out the 6.2 narrow slice from earlier today
+  (see the entry above) as part of the same feature.
+- **6.3 Presets**: save/list/delete, storing the full current filter object (all of 6.1's filters
+  plus hide-outcome/blind state), not just a couple of fields.
+- **6.4 Review mode**: `#reviewBtn` (enabled only once `currentHourOfDay() >= 17`, i.e. the
+  trading day has actually ended) fetches `/api/levels` with `until` pushed to end-of-day and
+  renders computed day_type/ranges/session-characters/raid booleans for comparison against what
+  the user saw live. Deliberately reuses the SAME endpoint the live chart uses rather than a
+  separate "reveal everything" code path -- there is no second no-leak surface to audit here.
+- **6.5 News markers**: `get_news()` (previously a stub) now returns real per-event data from the
+  calendar cache attached at `nylab.replay.server.serve()` startup (`data/calendar.parquet`,
+  loaded via `calendar_io.load_cache()`, degrading gracefully to `cal=None` with a note if the
+  file is missing/corrupt rather than crashing). Schedule fields (time/name/currency/importance/
+  forecast/previous) show immediately; `actual`/`surprise`/`surprise_z` are withheld until the
+  event's own release hour is inside `until`. Rendered as a `#newsStrip` text row plus chart
+  markers rather than a literal vertical line (REPLAY_TRAINER §5's description) -- disclosed
+  simplification.
+- **6.6 Challenge mode**: sequential play through the currently-filtered day queue with the
+  account balance carried over across days, reusing `nylab.replay.sim.maven_state()` (the exact
+  breach logic the existing free-practice account panel already used) for pass/fail detection
+  against `config/prop.yaml`'s `profit_targets_pct[0]`. Disclosed simplification: single-step
+  only, no step-2 progression modeled.
+- **6.7 Stats tab**: new `nylab/replay/journal_stats.py` runs `nylab.stats.r_stats()` -- the SAME
+  module the coded backtests use -- over the replay trainer's own `trades.csv` journal, grouped
+  by setup tag / weekday / preset, per REPLAY_TRAINER §8's "same stats module... directly
+  comparable" requirement.
+
+**Bug found and fixed during verification (outside 6.1-6.7's own scope, but found while testing
+them, so disclosed here in full)**: real end-to-end smoke testing (a real running server + a real
+headless-Chromium session via Playwright, not just `node --check` syntax checks or pytest, which
+can't exercise the frontend at all) caught a genuine PRE-EXISTING timezone/epoch bug, not
+something new in Phase 6's own code. `toEpoch()`/`tdPlusHours()` (Phase 2, `static/app.js`) built
+epochs by parsing an NY-wall-clock ISO string with the BROWSER's real `Date` object -- i.e. using
+whatever OS timezone the browser happens to run in. But the SERVER builds every bar/level epoch
+by treating NY wall-clock time as if it were UTC (pandas' `Timestamp.timestamp()` does this for
+naive datetimes) -- a deliberate convention so that lightweight-charts, which always renders in
+UTC, shows NY wall-clock numbers directly on the chart's time axis. These two conventions only
+agree when the browser's OS timezone is UTC+0. This sandbox's timezone is `Asia/Calcutta` (IST,
+UTC+5:30) -- confirmed via `Intl.DateTimeFormat().resolvedOptions().timeZone` in the actual
+Playwright-driven Chromium -- the same timezone Akash's real machine uses. Found via the new
+6.5 news-strip code showing "14:00" for an 08:30 NY NFP release; empirically confirmed (before
+any fix) a **-5.5 hour** discrepancy between `toEpoch(state.until)` and the actual last-loaded
+chart bar's epoch. This is more than a display bug: `toEpoch()` also gates the same-bar-fill
+eligibility checks for pending orders and open positions (`bar.time > toEpoch(placedAt/openedAt)`
+in `checkFillsAgainstNewBars()`), and feeds the shaded session-box overlay and session/news
+chart-marker x-positions -- so on any non-UTC machine this was silently affecting practice-trade
+fill timing and overlay placement, not just what text was shown.
+
+Fixed by rewriting `toEpoch()`: parsing a date string with `new Date()` and reading its components
+back with the LOCAL getters is a no-op round-trip regardless of the browser's timezone (whatever
+offset was applied on parse is exactly undone on read), so reinterpreting those same wall-clock
+numbers with `Date.UTC()` reproduces the server's convention exactly, with zero dependence on the
+browser's OS timezone. Also fixed `get_news()`/`renderNewsStrip()` to display event times via the
+existing `h_to_hhmm(h)` helper (hours since td midnight, a pure number with no timezone semantics
+at all) instead of `new Date(epoch).getHours()`, sidestepping the whole class of bug for that
+specific display. Re-verified via Playwright after the fix: `toEpoch(state.until)` now matches
+the last-loaded bar's epoch exactly (0h discrepancy, was -5.5h before), and the news strip shows
+"08:30" correctly.
+
+**Akash: please specifically eyeball the shaded session-box overlays and the news markers on your
+own machine after pulling this** -- this bug existed before today and predates Phase 6 entirely;
+I only found it because Phase 6's own testing happened to exercise the same code path. I can't
+rule out that some earlier session (before this fix) felt "off" in overlay position or fill
+timing without either of us knowing why.
+
+Also fixed a small cosmetic gap in `journal_stats.py` found during the same pass: an empty-string
+`setup_tag`/`preset` (how "no tag" round-trips through `csv.DictReader`) wasn't being folded into
+the "(none)" group the way a genuinely-missing (NaN) value was -- now both map to "(none)".
+
+**Verification**: 197/197 pytest tests pass (176 before Phase 6; +6 `test_replay_api.py` filter
+tests, +5 `test_replay_server_integration.py` HTTP tests, +8 new `tests/test_replay_phase6.py`,
++2 new `tests/test_journal_stats.py`). All new UI (every filter type, presets CRUD, DSL valid/
+invalid input, the stats panel, review-mode panel, challenge-mode start/stop) was exercised via a
+real running `nylab replay` server driven by a real headless-Chromium Playwright session against
+synthetic-but-realistic data (140 trading days, a synthetic calendar with real NFP/ECB-shaped
+events), checking both visible behavior and the absence of unexpected browser console errors --
+this caught two real issues before Akash would have (the `<details>`-collapsed-by-default test
+gotcha, which wasn't a code bug; and the timezone bug above, which was).
+
+**Disclosed simplifications** (all noted in ROADMAP.md's Phase 6 entry too): session-character
+filter UI covers lon/asia/nyam_kz only, not all 12 session ids (the rest remain reachable via the
+advanced DSL field); news markers render as a chart marker + text strip rather than a literal
+vertical line; challenge mode is single-step only, no Maven step-2 progression modeled.
+
+**Not yet done**: `docs/DESIGN_SYSTEM.md` needs its frozen-IDs list (§2) extended with the many
+new ids/classes this phase added, and its §1 "ahead-only previews" section needs updating now
+that these are real, working features rather than mockups -- planned as a separate,
+design-system-only commit per the usual rule (design-system work and ROADMAP/logic work never
+share a commit).

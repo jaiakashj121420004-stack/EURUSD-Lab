@@ -100,30 +100,58 @@ function applyTheme(dark) {
 }
 
 // ---------------------------------------------------------------- day list / filters
+// ROADMAP 6.1: every filter REPLAY_TRAINER.md S3 lists (session character, news, raids, ADR
+// ratio, a free-text DSL expression) now actually reaches nylab.replay.api.list_days() -- this
+// used to be date/weekday/exclude-thin plus two hardcoded London-raid checkboxes only.
 function currentFilters() {
   const weekdays = [...document.querySelectorAll("#fWeekdays input:checked")].map((c) => c.value).join(",");
+  const news = [...document.querySelectorAll(".fNews:checked")].map((c) => c.value);
+  const raids = [...document.querySelectorAll(".fRaid:checked")].map((c) => c.value);
+  const chars = {};
+  document.querySelectorAll(".charSelect").forEach((sel) => {
+    const vals = [...sel.selectedOptions].map((o) => o.value);
+    if (vals.length) chars[sel.dataset.sid] = vals;
+  });
   return {
     from: $("#fFrom").value || "", to: $("#fTo").value || "",
-    weekdays, exclude_thin: $("#fExcludeThin").checked ? "true" : "false",
+    weekdays, exclude_thin: $("#fExcludeThin").checked,
+    hide_outcome: $("#fHideOutcome").checked,
+    news, raids, chars,
+    adr_min: $("#fAdrMin").value || "", adr_max: $("#fAdrMax").value || "",
+    dsl: $("#fDsl").value || "",
   };
 }
 
-async function loadDayList() {
-  const f = currentFilters();
+function filtersToQuery(f) {
   const qs = new URLSearchParams();
   if (f.from) qs.set("from", f.from);
   if (f.to) qs.set("to", f.to);
   if (f.weekdays) qs.set("weekdays", f.weekdays);
-  qs.set("exclude_thin", f.exclude_thin);
-  const rows = await getJSON(`/api/days?${qs}`);
+  qs.set("exclude_thin", f.exclude_thin ? "true" : "false");
+  qs.set("hide_outcome", f.hide_outcome ? "true" : "false");
+  if (f.news && f.news.length) qs.set("news", f.news.join(","));
+  if (f.raids && f.raids.length) qs.set("raids", f.raids.join(","));
+  Object.entries(f.chars || {}).forEach(([sid, vals]) => qs.set(`char_${sid}`, vals.join(",")));
+  if (f.adr_min) qs.set("adr_min", f.adr_min);
+  if (f.adr_max) qs.set("adr_max", f.adr_max);
+  if (f.dsl) qs.set("dsl", f.dsl);
+  return qs;
+}
 
-  let filtered = rows;
-  if ($("#fLonHigh").checked) filtered = filtered.filter((r) => r.ny_takes_lon_high);
-  if ($("#fLonLow").checked) filtered = filtered.filter((r) => r.ny_takes_lon_low);
-
-  state.allDays = rows;
-  state.filteredDays = filtered;
-  $("#matchCount").textContent = `(${filtered.length} days)`;
+async function loadDayList() {
+  const f = currentFilters();
+  $("#fDslError").textContent = "";
+  let payload;
+  try {
+    payload = await getJSON(`/api/days?${filtersToQuery(f)}`);
+  } catch (e) {
+    $("#fDslError").textContent = e.message || String(e);
+    return; // keep showing the previous (last-valid) day list rather than blanking it
+  }
+  state.allDays = payload.days;
+  state.filteredDays = payload.days;
+  $("#matchCount").textContent = `(${payload.count} of ${payload.total_before_filters} days)`;
+  $("#spoilerBadge").style.display = payload.spoiler_filter_used ? "" : "none";
   renderDayTable();
 }
 
@@ -131,11 +159,22 @@ function renderDayTable() {
   const tbody = $("#dayTable tbody");
   tbody.innerHTML = "";
   const names = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const mask = "••••••";
   state.filteredDays.forEach((r) => {
     const tr = document.createElement("tr");
+    // Blind mode (REPLAY_TRAINER.md S3) masks EVERYTHING, including the date, with the hatched
+    // spoiler treatment -- it's the "don't let me recall a famous day" mode. Plain hide-outcome
+    // (the default) just leaves the two outcome-revealing columns as an em-dash placeholder, no
+    // hatch -- the row still looks like an ordinary row, it just has nothing to show yet.
     tr.className = "dayRow" + (r.date === state.currentTd ? " active" : "") + (state.blind ? " spoiler" : "");
-    const mask = "••••••";
-    tr.innerHTML = `<td data-label="Date">${state.blind ? mask : r.date}</td><td data-label="Day">${names[r.weekday] ?? ""}</td><td data-label="NY rng">${state.blind ? mask : (r.ny_range_pips ?? "—")}</td><td data-label="Lon rng">${state.blind ? mask : (r.lon_range_pips ?? "—")}</td>`;
+    const o = r.outcome || {};
+    const nyRng = r.outcome ? (o.ny_range_pips ?? "—") : "—";
+    const lonRng = r.outcome ? (o.lon_range_pips ?? "—") : "—";
+    const lonChar = r.outcome ? (o.lon_character ?? "—") : "—";
+    const dayType = r.outcome ? (o.day_type ?? "—") : "—";
+    tr.innerHTML = `<td data-label="Date">${state.blind ? mask : r.date}</td><td data-label="Day">${names[r.weekday] ?? ""}</td>` +
+      `<td data-label="NY rng">${state.blind ? mask : nyRng}</td><td data-label="Lon rng">${state.blind ? mask : lonRng}</td>` +
+      `<td data-label="Lon char">${state.blind ? mask : lonChar}</td><td data-label="Day type">${state.blind ? mask : dayType}</td>`;
     tr.onclick = () => loadDay(r.date);
     tbody.appendChild(tr);
   });
@@ -165,8 +204,11 @@ async function loadDay(td) {
 
   await refreshBars();
   await refreshLevels();
+  await refreshNews();
   renderDayTable();
   updateClockLabel();
+  updateReviewButtonState();
+  $("#reviewPanel").style.display = "none";
 }
 
 function tdPlusHours(tdStr, h) {
@@ -250,14 +292,42 @@ function applySessionBoxes() {
 }
 
 function applySessionMarkers() {
-  const markers = SESSION_WINDOWS.map(([name, lo]) => {
-    const t = Math.floor(new Date(tdPlusHours(state.currentTd, lo)).getTime() / 1000);
+  const sessionMarkers = SESSION_WINDOWS.map(([name, lo]) => {
+    const t = toEpoch(tdPlusHours(state.currentTd, lo)); // see toEpoch() -- must match server epoch convention
     return { time: t, position: "aboveBar", color: cssVar("--text-3"), shape: "circle", text: name };
   }).filter((m) => m.time <= toEpoch(state.until));
+  // ROADMAP 6.5: news events share the same setMarkers() call (lightweight-charts v4 replaces
+  // the whole marker set each time it's called, so one combined array, not two competing calls).
+  // Only ever built from state.news, which itself only ever holds what /api/news already agreed
+  // to reveal -- no separate no-leak check needed here.
+  const newsMarkers = (state.news || []).map((e) => ({
+    time: e.time, position: "belowBar", shape: "square",
+    color: e.currency === "USD" ? cssVar("--accent") : cssVar("--amber"),
+    text: e.released ? `${e.currency} ${e.family || e.event_name}` : `${e.currency} ${e.family || e.event_name} (scheduled)`,
+  }));
+  const markers = [...sessionMarkers, ...newsMarkers].sort((a, b) => a.time - b.time);
   try { state.series.setMarkers(markers); } catch (e) { /* time not in visible range yet */ }
 }
 
-function toEpoch(localIso) { return Math.floor(new Date(localIso).getTime() / 1000); }
+// PRE-EXISTING BUG FIX (found via Phase 6 smoke testing, see docs/PROGRESS.md): the server builds
+// every bar/level epoch by treating NY wall-clock time as if it were UTC (pandas' Timestamp.
+// timestamp() does this for naive datetimes) -- it is a deliberate convention, not a mistake, used
+// so lightweight-charts (which always renders in UTC) shows the NY wall-clock numbers directly.
+// The old implementation here, `new Date(localIso).getTime()/1000`, instead converts using the
+// BROWSER's real OS timezone, so it only agreed with the server's convention when the browser's
+// OS timezone happened to be UTC+0. On any other timezone (confirmed: IST, UTC+5:30, matching
+// both this dev sandbox and Akash's real machine) every comparison against a server-epoch value
+// was off by the browser's UTC offset -- this silently miscalculated shaded session-box
+// placement, the session marker/news marker x-positions, AND (more seriously) the same-bar-fill
+// eligibility checks (`bar.time > toEpoch(placedAt/openedAt)`) that gate order fills. Parsing a
+// Date and reading its components back with the LOCAL getters is a no-op round-trip regardless of
+// timezone (whatever offset was applied on parse is undone on read), so reinterpreting those same
+// wall-clock numbers with Date.UTC() reproduces the server's convention exactly, with no
+// dependence on the browser's timezone at all.
+function toEpoch(localIso) {
+  const d = new Date(localIso);
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()) / 1000);
+}
 
 function updateClockLabel() {
   const t = new Date(state.until);
@@ -278,7 +348,9 @@ async function stepBars(nBars) {
   state.until = addMinutesToUntil(stepMinutes * nBars);
   await refreshBars();
   await refreshLevels();
+  await refreshNews();
   updateClockLabel();
+  updateReviewButtonState();
 }
 
 $("#stepFwd").onclick = () => stepBars(1);
@@ -291,7 +363,7 @@ $("#jumpBtn").onclick = () => {
   d.setHours(hh, mm, 0, 0);
   const pad = (n) => String(n).padStart(2, "0");
   state.until = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(hh)}:${pad(mm)}:00`;
-  refreshBars(); refreshLevels(); updateClockLabel();
+  refreshBars(); refreshLevels(); refreshNews(); updateClockLabel(); updateReviewButtonState();
 };
 
 $("#playPause").onclick = () => {
@@ -313,12 +385,26 @@ $("#nextDay").onclick = () => { if (state.currentIdx < state.filteredDays.length
 $("#randomDay").onclick = () => { if (state.filteredDays.length) loadDay(state.filteredDays[Math.floor(Math.random() * state.filteredDays.length)].date); };
 $("#datePicker").onchange = (e) => { if (e.target.value) loadDay(e.target.value); };
 $("#tf").onchange = () => { state.tf = $("#tf").value; refreshBars(); };
-$("#blindMode").onchange = (e) => { state.blind = e.target.checked; renderDayTable(); drawLevelLines(); };
+$("#blindMode").onchange = (e) => {
+  state.blind = e.target.checked;
+  // Blind mode implies hide-outcome (there is no point hiding the date but showing the day's
+  // character/range next to it) -- force the checkbox and grey it out while blind mode is on.
+  if (state.blind) { $("#fHideOutcome").checked = true; $("#fHideOutcome").disabled = true; }
+  else { $("#fHideOutcome").disabled = false; }
+  loadDayList();
+  renderDayTable();
+  drawLevelLines();
+};
 $("#darkToggle").onchange = (e) => applyTheme(e.target.checked);
 
-document.querySelectorAll("#fWeekdays input, #fExcludeThin, #fLonHigh, #fLonLow").forEach((el) => el.addEventListener("change", loadDayList));
+document.querySelectorAll("#fWeekdays input, #fExcludeThin, #fHideOutcome, .fNews, .fRaid, .charSelect")
+  .forEach((el) => el.addEventListener("change", loadDayList));
 $("#fFrom").onchange = loadDayList;
 $("#fTo").onchange = loadDayList;
+$("#fAdrMin").onchange = loadDayList;
+$("#fAdrMax").onchange = loadDayList;
+$("#fDslApply").onclick = loadDayList;
+$("#fDsl").addEventListener("keydown", (e) => { if (e.key === "Enter") loadDayList(); });
 
 // ---------------------------------------------------------------- trading + account
 $("#orderType").onchange = () => {
@@ -443,6 +529,7 @@ async function finishTrade(exitPrice, reason) {
   updateTicketUI();
   drawPositionLines();
   await refreshAccountPanel();
+  if (state.challengeState) await checkChallengeBreach();
 }
 
 async function refreshAccountPanel() {
@@ -538,6 +625,7 @@ $("#saveJournalBtn").onclick = async () => {
     risk_pips: t.risk_pips, R_gross: t.R_gross, R_net: t.R_net,
     setup_tag: $("#setupTag").value, rules_followed: $("#rulesFollowed").value,
     emotion: $("#emotion").value, notes: $("#notes").value,
+    preset: state.currentPresetName || "", challenge: state.challengeState ? "yes" : "",
   });
   try {
     const canvas = state.chart.takeScreenshot();
@@ -549,28 +637,58 @@ $("#saveJournalBtn").onclick = async () => {
   alert("Saved to research/replay/trades.csv");
 };
 
-// ---------------------------------------------------------------- presets
+// ---------------------------------------------------------------- presets (ROADMAP 6.3)
+// Saves the FULL current filter state -- every field currentFilters() returns -- not just the
+// two original date/raid fields, so a preset genuinely reproduces "exactly these days" later.
+state.currentPresetName = null;
+
 async function loadPresetList() {
   const presets = await getJSON("/api/presets");
+  state.presets = presets;
   const sel = $("#presetSelect");
+  const prevValue = sel.value;
   sel.innerHTML = '<option value="">-- load preset --</option>';
   presets.forEach((p) => sel.insertAdjacentHTML("beforeend", `<option value="${p.name}">${p.name}</option>`));
-  sel.onchange = () => {
-    const p = presets.find((x) => x.name === sel.value);
-    if (!p) return;
-    if (p.from) $("#fFrom").value = p.from;
-    if (p.to) $("#fTo").value = p.to;
-    $("#fLonHigh").checked = !!p.lon_high;
-    $("#fLonLow").checked = !!p.lon_low;
-    loadDayList();
-  };
+  sel.value = prevValue;
+  sel.onchange = () => applyPreset(sel.value);
 }
+
+function applyPreset(name) {
+  const p = (state.presets || []).find((x) => x.name === name);
+  state.currentPresetName = name || null;
+  if (!p) return;
+  $("#fFrom").value = p.from || "";
+  $("#fTo").value = p.to || "";
+  document.querySelectorAll("#fWeekdays input").forEach((c) => { c.checked = !p.weekdays || p.weekdays.includes(c.value); });
+  $("#fExcludeThin").checked = p.exclude_thin !== false;
+  $("#fHideOutcome").checked = p.hide_outcome !== false;
+  document.querySelectorAll(".fNews").forEach((c) => { c.checked = (p.news || []).includes(c.value); });
+  document.querySelectorAll(".fRaid").forEach((c) => { c.checked = (p.raids || []).includes(c.value); });
+  document.querySelectorAll(".charSelect").forEach((sel) => {
+    const wanted = (p.chars || {})[sel.dataset.sid] || [];
+    [...sel.options].forEach((o) => { o.selected = wanted.includes(o.value); });
+  });
+  $("#fAdrMin").value = p.adr_min || "";
+  $("#fAdrMax").value = p.adr_max || "";
+  $("#fDsl").value = p.dsl || "";
+  loadDayList();
+}
+
 $("#savePreset").onclick = async () => {
-  const name = prompt("Preset name:");
+  const name = prompt("Preset name:", state.currentPresetName || "");
   if (!name) return;
   const f = currentFilters();
-  await postJSON("/api/presets", { name, from: f.from, to: f.to, lon_high: $("#fLonHigh").checked, lon_low: $("#fLonLow").checked });
-  loadPresetList();
+  await postJSON("/api/presets", { name, ...f });
+  state.currentPresetName = name;
+  await loadPresetList();
+  $("#presetSelect").value = name;
+};
+$("#deletePreset").onclick = async () => {
+  const name = $("#presetSelect").value;
+  if (!name || !confirm(`Delete preset "${name}"?`)) return;
+  await postJSON("/api/presets/delete", { name });
+  state.currentPresetName = null;
+  await loadPresetList();
 };
 
 // ---------------------------------------------------------------- responsive: drawers + sheet
@@ -629,6 +747,168 @@ document.addEventListener("click", (e) => {
   tooltipEl.style.top = `${top}px`;
   tooltipEl.style.left = `${left}px`;
 });
+
+// ---------------------------------------------------------------- ROADMAP 6.4 review mode
+// "End-of-day -> Review mode: full day revealed + the lab's computed events... overlaid so he
+// can compare what he saw vs what the rules detected" (REPLAY_TRAINER.md S5). This is NOT a
+// separate code path: it calls the SAME /api/levels no-leak endpoint the live chart already
+// uses, just with `until` pushed to day-close (h=17, when day_range/day_type finally resolve),
+// so it can never show more than a normal API call at that same `until` would.
+function currentHourOfDay() {
+  if (!state.currentTd) return -99;
+  const tdMid = new Date(state.currentTd + "T00:00:00").getTime();
+  return (new Date(state.until).getTime() - tdMid) / 3600000;
+}
+function updateReviewButtonState() {
+  $("#reviewBtn").disabled = currentHourOfDay() < 17;
+}
+$("#reviewBtn").onclick = async () => {
+  const endOfDay = tdPlusHours(state.currentTd, 17);
+  const { levels } = await getJSON(`/api/levels?${new URLSearchParams({ td: state.currentTd, until: endOfDay })}`);
+  const rows = [
+    ["Day type", levels.day_type], ["Day range (pips)", levels.day_range],
+    ["London character", levels.lon_character], ["Asia character", levels.asia_character],
+    ["NY AM KZ character", levels.nyam_kz_character], ["NY PM character", levels.nypm_character],
+    ["NY took London high", levels.ny_takes_lon_high], ["NY took London low", levels.ny_takes_lon_low],
+    ["NY took PDH", levels.ny_takes_pdh], ["NY took PDL", levels.ny_takes_pdl],
+    ["NY formed the day's high", levels.ny_forms_day_high], ["NY formed the day's low", levels.ny_forms_day_low],
+  ].filter(([, v]) => v !== undefined && v !== null);
+  $("#reviewPanel").innerHTML = `<button class="press closeBtn" id="reviewClose">close</button>` +
+    `<h4>What the rules detected -- ${state.currentTd}</h4>` +
+    `<table>${rows.map(([k, v]) => `<tr><td>${k}</td><td><b>${typeof v === "boolean" ? (v ? "yes" : "no") : v}</b></td></tr>`).join("")}</table>` +
+    `<p class="muted">Compare this against what YOU thought was happening while stepping through the day above.</p>`;
+  $("#reviewPanel").style.display = "block";
+  $("#reviewClose").onclick = () => { $("#reviewPanel").style.display = "none"; };
+};
+
+// ---------------------------------------------------------------- ROADMAP 6.5 news markers
+// Scheduled events show as soon as the day loads (the calendar is known in advance); actual/
+// surprise are withheld by the SERVER (nylab.replay.api.get_news), not just hidden in the UI,
+// until release time <= `until` -- same no-leak rule as bars/levels.
+async function refreshNews() {
+  if (!state.currentTd) return;
+  let news = [];
+  try {
+    const r = await getJSON(`/api/news?${new URLSearchParams({ td: state.currentTd, until: state.until })}`);
+    news = r.news || [];
+  } catch (e) { /* calendar not attached -- leave the strip empty, not an error to the user */ }
+  state.news = news;
+  renderNewsStrip();
+  applyNewsMarkers();
+}
+function renderNewsStrip() {
+  const strip = $("#newsStrip");
+  if (!state.news || !state.news.length) { strip.innerHTML = ""; return; }
+  strip.innerHTML = state.news.map((e) => {
+    // NY-clock display MUST come from the server's h (hours since td midnight, NY time) via
+    // h_to_hhmm -- never from `new Date(e.time*1000).getHours()`, which reads the epoch back
+    // in the BROWSER's local timezone and silently shows the wrong clock time whenever the
+    // browser's OS timezone isn't UTC+0 (discovered via real-browser smoke testing: an 08:30 NY
+    // NFP release showed as "14:00" under IST). `e.time` (the raw epoch) is kept in the payload
+    // only for chart marker placement, which lightweight-charts consumes as UTC seconds and is
+    // unaffected by browser-local timezone.
+    const hhmm = h_to_hhmm(e.h);
+    if (!e.released) return `<span class="newsChip pending">${hhmm} ${e.currency} ${e.event_name}</span>`;
+    const cls = e.surprise > 0 ? "surprise-up" : e.surprise < 0 ? "surprise-down" : "";
+    return `<span class="newsChip ${cls}" title="forecast ${e.forecast ?? '—'}, previous ${e.previous ?? '—'}">` +
+           `${hhmm} ${e.currency} ${e.event_name}: ${e.actual ?? '—'}</span>`;
+  }).join("");
+}
+// News markers share ONE setMarkers() call with the session-window markers below (lightweight-
+// charts v4 replaces the whole marker set on every call) -- applySessionMarkers() is the
+// combined renderer now; keep this name for the news-only half so refreshNews() can call it
+// without needing to know about session windows.
+function applyNewsMarkers() { applySessionMarkers(); }
+
+// ---------------------------------------------------------------- ROADMAP 6.6 challenge mode
+// Plays a sequence of the CURRENTLY FILTERED days in chronological order with the account
+// balance carried over, enforcing the active Maven program's daily/max drawdown limits (the
+// same sim.maven_state() the free-practice account panel already uses) until the profit target
+// is hit (pass), a limit is breached (fail), or the filtered day queue runs out (incomplete).
+// Deliberately single-step only (disclosed simplification, docs/PROGRESS.md): a real Maven
+// 2-step program's step-2 re-entry isn't modeled here.
+state.challengeState = null;
+$("#startChallenge").onclick = () => {
+  if (!state.filteredDays.length) { alert("No days match the current filters."); return; }
+  const queue = [...state.filteredDays].map((r) => r.date).sort();
+  state.challengeState = {
+    queue, idx: 0,
+    startingBalance: state.account.starting,
+    target: state.account.program
+      ? state.account.starting * (1 + (state.account.program.profit_targets_pct?.[0] || 8) / 100)
+      : state.account.starting * 1.08,
+    outcome: null,
+  };
+  state.account.balance = state.account.starting;
+  state.account.peak = state.account.starting;
+  state.account.dayStart = state.account.starting;
+  $("#challengeBanner").style.display = "flex";
+  loadDay(queue[0]);
+  updateChallengeBanner();
+};
+$("#challengeStop").onclick = () => { state.challengeState = null; $("#challengeBanner").style.display = "none"; };
+$("#challengeNextDay").onclick = async () => {
+  const c = state.challengeState;
+  if (!c) return;
+  await refreshAccountPanel(); // settle any breach state before evaluating
+  c.idx += 1;
+  state.account.dayStart = state.account.balance; // ROADMAP 6.6: daily DD resets each new challenge day
+  if (state.account.balance >= c.target) { c.outcome = "pass"; }
+  else if (c.idx >= c.queue.length) { c.outcome = "incomplete"; }
+  if (c.outcome) { finishChallenge(); return; }
+  await loadDay(c.queue[c.idx]);
+  updateChallengeBanner();
+};
+async function checkChallengeBreach() {
+  const c = state.challengeState;
+  if (!c || c.outcome) return;
+  const s = await postJSON("/api/sim/maven_state", {
+    starting_balance: state.account.starting, current_balance: state.account.balance,
+    day_start_balance: state.account.dayStart, peak_balance: state.account.peak,
+    program: state.account.program,
+  });
+  if (s.day_dd_breached || s.max_dd_breached) { c.outcome = "fail"; finishChallenge(); }
+}
+function updateChallengeBanner() {
+  const c = state.challengeState;
+  if (!c) return;
+  $("#challengeStatus").textContent =
+    `Challenge: day ${c.idx + 1} of ${c.queue.length} -- balance $${state.account.balance.toFixed(2)} -- target $${c.target.toFixed(2)}`;
+}
+function finishChallenge() {
+  const c = state.challengeState;
+  $("#challengeBanner").style.display = "none";
+  const verdictText = { pass: "PASSED", fail: "FAILED (a drawdown limit was breached)", incomplete: "ran out of filtered days (incomplete)" }[c.outcome];
+  alert(`Challenge ${verdictText}.\nDays played: ${c.idx + 1}\nFinal balance: $${state.account.balance.toFixed(2)}`);
+  state.challengeState = null;
+}
+
+// ---------------------------------------------------------------- ROADMAP 6.7 stats tab
+// Fetches the SAME aggregate stats nylab.replay.journal_stats.build() computes with
+// nylab.stats.r_stats() -- one implementation of expectancy/win-rate math, not a second one here.
+async function openStatsPanel() {
+  $("#statsPanel").classList.add("open");
+  $("#statsBody").textContent = "Loading...";
+  try {
+    const s = await getJSON("/api/journal/stats");
+    const fmtPct = (x) => x == null ? "—" : (x * 100).toFixed(1) + "%";
+    const fmtNum = (x) => x == null ? "—" : x.toFixed(2);
+    const groupTable = (title, rows) => rows.length
+      ? `<h4>${title}</h4><table><tr><th>Group</th><th>n</th><th>Win%</th><th>Exp (R)</th></tr>` +
+        rows.map((r) => `<tr><td>${r.group}</td><td>${r.n}</td><td>${fmtPct(r.win_rate)}</td><td>${fmtNum(r.expectancy)}</td></tr>`).join("") +
+        `</table>` : "";
+    $("#statsBody").innerHTML =
+      `<h4>Overall (${s.n_trades} trades)</h4>` +
+      `<table><tr><td>Win rate</td><td><b>${fmtPct(s.overall.win_rate)}</b></td></tr>` +
+      `<tr><td>Expectancy</td><td><b>${fmtNum(s.overall.expectancy)} R</b></td></tr>` +
+      `<tr><td>Profit factor</td><td><b>${fmtNum(s.overall.profit_factor)}</b></td></tr></table>` +
+      groupTable("By setup tag", s.by_setup_tag) + groupTable("By weekday", s.by_weekday) + groupTable("By preset", s.by_preset);
+  } catch (e) {
+    $("#statsBody").textContent = `Could not load stats: ${e.message || e}`;
+  }
+}
+$("#statsToggle").onclick = openStatsPanel;
+$("#statsClose").onclick = () => $("#statsPanel").classList.remove("open");
 
 // ---------------------------------------------------------------- boot
 (async function init() {
