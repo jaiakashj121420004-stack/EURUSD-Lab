@@ -307,9 +307,17 @@ canvas#chart{ width:100%; height:100%; display:block; border-radius:14px; backgr
 
 .gauge-row{ display:flex; gap:14px; justify-content:center; margin:14px 0 18px; }
 .gauge{ display:flex; flex-direction:column; align-items:center; gap:6px; }
-.gauge svg{ width:88px; height:88px; }
-.gauge-label{ font-size:10px; color:var(--text-3); font-weight:700; text-transform:uppercase; }
-.gauge-val{ font-size:14px; font-weight:800; margin-top:-56px; font-family:var(--font-mono); }
+/* Fixed 2026-09-27 (Akash: gauge value/label text overflowed the ring): the value used to be
+   pulled up over the ring with a hardcoded negative margin-top, which also dragged the LABEL
+   below it up by the same amount, pushing the label past the ring's own bottom edge. The value
+   is now truly centered inside the ring via position:absolute on a sized wrapper -- no negative
+   margins, no dependency on the ring's exact pixel height -- and the label sits in normal flow
+   right below the ring, so both always have their own space regardless of ring size. */
+.gauge-ring-wrap{ position:relative; width:88px; height:88px; }
+.gauge svg{ width:88px; height:88px; display:block; }
+.gauge-val{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-size:14px; font-weight:800; font-family:var(--font-mono); }
+.gauge-label{ font-size:10px; color:var(--text-3); font-weight:700; text-transform:uppercase; text-align:center; }
 .gauge-ring-track{ fill:none; stroke: var(--shadow-dark); stroke-width:8; opacity:.5; }
 .gauge-ring-fill{ fill:none; stroke-width:8; stroke-linecap:round; transition: stroke-dashoffset var(--t-slow) var(--ease-settle), stroke var(--t-med) var(--ease-glide); }
 .gauge.pulse .gauge-ring-fill{ animation: glow-pulse 700ms ease-out 1; }
@@ -665,19 +673,23 @@ html,body{ max-width:100vw; }
           </div>
           <div class="gauge-row">
             <div class="gauge" id="gaugeDaily">
-              <svg viewBox="0 0 100 100">
-                <circle class="gauge-ring-track" cx="50" cy="50" r="40"/>
-                <circle class="gauge-ring-fill" cx="50" cy="50" r="40" stroke="var(--bull)" stroke-dasharray="251.2" stroke-dashoffset="163" transform="rotate(-90 50 50)"/>
-              </svg>
-              <div class="gauge-val">35%</div>
+              <div class="gauge-ring-wrap">
+                <svg viewBox="0 0 100 100">
+                  <circle class="gauge-ring-track" cx="50" cy="50" r="40"/>
+                  <circle class="gauge-ring-fill" cx="50" cy="50" r="40" stroke="var(--bull)" stroke-dasharray="251.2" stroke-dashoffset="163" transform="rotate(-90 50 50)"/>
+                </svg>
+                <div class="gauge-val">35%</div>
+              </div>
               <div class="gauge-label">Daily Limit</div>
             </div>
             <div class="gauge breach" id="gaugeOverall">
-              <svg viewBox="0 0 100 100">
-                <circle class="gauge-ring-track" cx="50" cy="50" r="40"/>
-                <circle class="gauge-ring-fill" cx="50" cy="50" r="40" stroke="var(--bear)" stroke-dasharray="251.2" stroke-dashoffset="38" transform="rotate(-90 50 50)"/>
-              </svg>
-              <div class="gauge-val">85%</div>
+              <div class="gauge-ring-wrap">
+                <svg viewBox="0 0 100 100">
+                  <circle class="gauge-ring-track" cx="50" cy="50" r="40"/>
+                  <circle class="gauge-ring-fill" cx="50" cy="50" r="40" stroke="var(--bear)" stroke-dasharray="251.2" stroke-dashoffset="38" transform="rotate(-90 50 50)"/>
+                </svg>
+                <div class="gauge-val">85%</div>
+              </div>
               <div class="gauge-label">Overall Limit</div>
             </div>
           </div>
@@ -876,8 +888,8 @@ html,body{ max-width:100vw; }
     <div class="sheet-pane" data-pane="account" style="display:none;">
       <div class="balance-hero"><div class="balance-label">Balance</div><div class="balance-num tabular">10,412.30</div></div>
       <div class="gauge-row">
-        <div class="gauge"><svg viewBox="0 0 100 100"><circle class="gauge-ring-track" cx="50" cy="50" r="40"/><circle class="gauge-ring-fill" cx="50" cy="50" r="40" stroke="var(--bull)" stroke-dasharray="251.2" stroke-dashoffset="163" transform="rotate(-90 50 50)"/></svg><div class="gauge-val">35%</div><div class="gauge-label">Daily</div></div>
-        <div class="gauge"><svg viewBox="0 0 100 100"><circle class="gauge-ring-track" cx="50" cy="50" r="40"/><circle class="gauge-ring-fill" cx="50" cy="50" r="40" stroke="var(--bear)" stroke-dasharray="251.2" stroke-dashoffset="38" transform="rotate(-90 50 50)"/></svg><div class="gauge-val">85%</div><div class="gauge-label">Overall</div></div>
+        <div class="gauge"><div class="gauge-ring-wrap"><svg viewBox="0 0 100 100"><circle class="gauge-ring-track" cx="50" cy="50" r="40"/><circle class="gauge-ring-fill" cx="50" cy="50" r="40" stroke="var(--bull)" stroke-dasharray="251.2" stroke-dashoffset="163" transform="rotate(-90 50 50)"/></svg><div class="gauge-val">35%</div></div><div class="gauge-label">Daily</div></div>
+        <div class="gauge"><div class="gauge-ring-wrap"><svg viewBox="0 0 100 100"><circle class="gauge-ring-track" cx="50" cy="50" r="40"/><circle class="gauge-ring-fill" cx="50" cy="50" r="40" stroke="var(--bear)" stroke-dasharray="251.2" stroke-dashoffset="38" transform="rotate(-90 50 50)"/></svg><div class="gauge-val">85%</div></div><div class="gauge-label">Overall</div></div>
       </div>
     </div>
     <div class="sheet-pane" data-pane="journal" style="display:none;">
