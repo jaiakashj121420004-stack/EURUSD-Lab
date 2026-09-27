@@ -1,5 +1,6 @@
 """ROADMAP Phase 5.6 tests: nylab/label_validate.py -- day sampling (stratified floor + random
-fill, never trimming the floor), payload building, HTML rendering, and answer scoring."""
+fill, never trimming the floor; and stratified floor + near-threshold curated fill), payload
+building, HTML rendering, and answer scoring."""
 from __future__ import annotations
 
 import numpy as np
@@ -25,6 +26,30 @@ def _fake_days(n=200, seed=1):
     return df
 
 
+def _fake_days_with_features(n=200, seed=1):
+    """Same label columns as `_fake_days`, plus the continuous feature columns
+    `sample_days_curated`'s boundary-distance ranking needs (range_rel/er/close_loc per
+    validated session; day_high/day_low/day_close/pdh/pdl for day_type) -- uniform random in
+    each feature's plausible range so some fake days land near a threshold and some don't."""
+    days = _fake_days(n=n, seed=seed)
+    rng = np.random.default_rng(seed + 100)
+    for sid, prefix in lv._PREFIX.items():
+        days[f"{prefix}_range_rel"] = rng.uniform(0.2, 2.0, n)
+        days[f"{prefix}_er"] = rng.uniform(0.0, 1.0, n)
+        days[f"{prefix}_close_loc"] = rng.uniform(0.0, 1.0, n)
+    day_open = rng.uniform(1.05, 1.15, n)
+    day_range = rng.uniform(0.002, 0.02, n)
+    day_high = day_open + day_range * rng.uniform(0.3, 0.7, n)
+    day_low = day_open - day_range * rng.uniform(0.3, 0.7, n)
+    days["day_open"] = day_open
+    days["day_high"] = day_high
+    days["day_low"] = day_low
+    days["day_close"] = day_low + rng.uniform(0.0, 1.0, n) * (day_high - day_low)
+    days["pdh"] = pd.Series(day_high, index=days.index).shift(1).bfill()
+    days["pdl"] = pd.Series(day_low, index=days.index).shift(1).bfill()
+    return days
+
+
 def test_sample_days_never_drops_the_stratified_floor():
     days = _fake_days()
     out = lv.sample_days(days, n=30, seed=7)
@@ -44,6 +69,69 @@ def test_sample_days_deterministic_for_fixed_seed():
     a = lv.sample_days(days, n=30, seed=99)
     b = lv.sample_days(days, n=30, seed=99)
     assert a == b
+
+
+def test_sample_days_curated_never_drops_the_stratified_floor():
+    days = _fake_days_with_features()
+    out = lv.sample_days_curated(days, n=20, seed=43)
+    assert days.index[137] in out  # same planted rare-label day as the random-strategy test
+
+
+def test_sample_days_curated_returns_at_least_n_and_no_duplicates():
+    days = _fake_days_with_features()
+    out = lv.sample_days_curated(days, n=20, seed=43)
+    assert len(out) >= 20
+    assert len(out) == len(set(out))
+    assert list(out) == sorted(out)
+
+
+def test_sample_days_curated_deterministic_for_fixed_seed():
+    days = _fake_days_with_features()
+    a = lv.sample_days_curated(days, n=20, seed=43)
+    b = lv.sample_days_curated(days, n=20, seed=43)
+    assert a == b
+
+
+def test_sample_days_curated_prefers_near_boundary_days_over_random_fill():
+    """The whole point of the curated strategy: beyond the shared stratified floor, its FILL
+    days should sit closer to a rule boundary (lower `_day_ambiguity_score`) than the uniform-
+    random fill `sample_days` would pick, on average. This is a deterministic comparison (both
+    functions are seeded), not a statistical one, so there's no flakiness risk."""
+    days = _fake_days_with_features()
+    floor, _ = lv._stratified_floor(days, seed=43)
+    # n well above the floor size (28 for this fixture/seed) so both strategies actually add
+    # fill days beyond it -- with n <= floor size there's nothing to compare.
+    n = len(floor) + 30
+    curated = lv.sample_days_curated(days, n=n, seed=43)
+    randomized = lv.sample_days(days, n=n, seed=43)
+
+    def mean_fill_score(tds):
+        fill = [td for td in tds if td not in floor]
+        scores = [lv._day_ambiguity_score(days.loc[td]) for td in fill]
+        scores = [s for s in scores if not np.isnan(s)]
+        return np.mean(scores) if scores else None
+
+    curated_mean = mean_fill_score(curated)
+    random_mean = mean_fill_score(randomized)
+    assert curated_mean is not None and random_mean is not None
+    assert curated_mean < random_mean
+
+
+def test_character_boundary_distance_is_zero_right_on_a_threshold():
+    row = pd.Series({"x_range_rel": 0.6, "x_er": 1.0, "x_close_loc": 0.5})
+    assert lv._character_boundary_distance(row, "x") == pytest.approx(0.0)
+
+
+def test_character_boundary_distance_nan_when_a_feature_is_missing():
+    row = pd.Series({"x_range_rel": np.nan, "x_er": 1.0, "x_close_loc": 0.5})
+    assert np.isnan(lv._character_boundary_distance(row, "x"))
+
+
+def test_day_type_boundary_distance_uses_day_range_normalization():
+    # day_high sits exactly on pdh -> distance 0 regardless of the day's own range size.
+    row = pd.Series({"day_high": 1.1050, "day_low": 1.1000, "day_close": 1.1020,
+                      "pdh": 1.1050, "pdl": 1.0950})
+    assert lv._day_type_boundary_distance(row) == pytest.approx(0.0)
 
 
 def _fake_bars_for(tds, seed=2):
@@ -82,7 +170,7 @@ def test_render_html_embeds_data_and_has_no_leftover_placeholders():
     payload = lv.build_payload(bars, days, sessions_cfg, tds)
     html = lv.render_html(payload)
     assert "%%" not in html
-    assert "<html>" in html and "</html>" in html
+    assert "<html" in html and "</html>" in html
     assert "downloadAnswers" in html
     assert str(len(payload["days"])) in html
 

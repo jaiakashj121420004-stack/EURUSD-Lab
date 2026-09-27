@@ -206,7 +206,8 @@ notes: ""
 def cmd_label_validate_build(args):
     """ROADMAP 5.6: sample days, package their bars + computed character/day_type labels into
     a single self-contained HTML page (no server needed) for Akash to click through offline."""
-    html, payload = label_validate.build(args.cache_dir, cfg.sessions(), n=args.n, seed=args.seed)
+    html, payload = label_validate.build(args.cache_dir, cfg.sessions(), n=args.n, seed=args.seed,
+                                          strategy=args.strategy)
     os.makedirs(args.out_dir, exist_ok=True)
     html_path = os.path.join(args.out_dir, f"sample_{args.seed}.html")
     meta_path = os.path.join(args.out_dir, f"sample_{args.seed}_meta.json")
@@ -288,8 +289,14 @@ def main():
                                                    "character/day_type labels with Akash")
     lv_sub = p_lv.add_subparsers(dest="lv_command", required=True)
     p_lv_build = lv_sub.add_parser("build", help="sample days, write a self-contained HTML review page")
-    p_lv_build.add_argument("--n", type=int, default=30)
-    p_lv_build.add_argument("--seed", type=int, default=42)
+    p_lv_build.add_argument("--n", type=int, default=20)
+    p_lv_build.add_argument("--seed", type=int, default=43,
+                             help="43+ for the curated strategy (round 3 onward); rounds 1-2 used seed 42 "
+                                  "with --strategy random")
+    p_lv_build.add_argument("--strategy", choices=["curated", "random"], default="curated",
+                             help="'curated' (default, ROADMAP 5.6 round 3+): near-rule-boundary fill "
+                                  "beyond the stratified floor. 'random': the original round 1/2 "
+                                  "uniform-random fill, kept for reproducing old rounds.")
     p_lv_build.add_argument("--cache-dir", dest="cache_dir", default="data/cache")
     p_lv_build.add_argument("--out-dir", dest="out_dir", default="research/label_validation")
     p_lv_build.set_defaults(func=cmd_label_validate_build)
