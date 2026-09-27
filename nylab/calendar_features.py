@@ -140,3 +140,26 @@ def column_docs() -> dict[str, float]:
             docs[f"{prefix}_{ccy}_cnt"] = avail
             docs[f"{prefix}_{ccy}_maxz"] = avail
     return docs
+
+
+# ROADMAP 5.7.2: each SESSION_PREFIXES session's own lo bound (config/windows.yaml), i.e. the
+# hour a `{prefix}_usd_cnt`/`{prefix}_usd_maxz` count actually starts scanning for events -- it
+# has to walk the WHOLE session window (any event inside it could be the one counted), same
+# "genuinely needs the whole window, not just its own endpoint" status as that session's own
+# _high/_low columns. The bare scheduling flags (has_nfp, red_usd_0830, ...) are NOT aggregates
+# over a window -- MT5's calendar knows the schedule the instant the day opens -- so they are
+# deliberately left out here and fall back to their own available_at_h (a point value, no
+# overlap risk) via nylab.hyp_loader's `.get(col, avail)` default.
+_SESSION_LO = {"asia": -4.0, "lon": 2.0, "preny": 7.0, "nyam_kz": 7.0, "ny": 7.0}
+
+
+def column_starts_at_h() -> dict[str, float]:
+    """starts_at_h for the session event-count/max-|z| columns (ROADMAP 5.7.2) -- merged into
+    nylab.days.COLUMN_STARTS_AT_H the same way column_docs() merges into COLUMN_DOCS."""
+    docs: dict[str, float] = {}
+    for prefix, (session_name, _avail) in SESSION_PREFIXES.items():
+        lo = _SESSION_LO[session_name]
+        for ccy in ("usd", "eur"):
+            docs[f"{prefix}_{ccy}_cnt"] = lo
+            docs[f"{prefix}_{ccy}_maxz"] = lo
+    return docs

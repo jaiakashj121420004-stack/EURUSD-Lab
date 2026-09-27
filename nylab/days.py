@@ -39,9 +39,57 @@ COLUMN_DOCS = {
     "ny_hits_asia_+1sd": 16, "ny_hits_asia_-1sd": 16, "ny_hits_asia_+2sd": 16, "ny_hits_asia_-2sd": 16,
     "ny_hits_asia_+2.5sd": 16, "ny_hits_asia_-2.5sd": 16,
     "dow": -7, "ny_forms_day_high": 17, "ny_forms_day_low": 17,
+    # ROADMAP 5.7.2: a clean post-09:30 outcome column (09:30-16:00 range, pips) and its
+    # prior-20-day-relative version -- see COLUMN_STARTS_AT_H below for why ny_range couldn't
+    # serve this role for a decision_time_h=9.5 hypothesis (RESEARCH_PROTOCOL.md S3, H013).
+    "r0930_1600": 16, "r0930_1600_rel": 16,
 }
 COLUMN_DOCS.update(calendar_features.column_docs())  # ROADMAP 4.3: news columns join the
 # same look-ahead registry as everything else -- nylab.hyp_loader checks this dict, not two.
+
+# ROADMAP 5.7.2: the EARLIEST NY hour whose raw bars genuinely feed into each DAY column's
+# value -- as opposed to available_at_h (COLUMN_DOCS above), which is when the value is fully
+# SETTLED. For most columns the two are the same (a point-in-time price, or a value that's
+# purely historical by the time the trading day opens): only listed here when they differ.
+#
+# nylab.hyp_loader uses this for a SEPARATE check from the look-ahead one: an `outcome` column
+# is rejected if it starts_at_h < decision_time_h AND it isn't yet available_at_h <=
+# decision_time_h either (i.e. it's still a genuine future measurement, but its window dips back
+# before the decision was made) -- exactly the trap RESEARCH_PROTOCOL.md S3 found in H013: its
+# outcome `ny_range` spans 07:00-16:00, so a big 07:00-09:30 move (the SAME move `condition`
+# reads via `adr_used_0930`) makes both condition and outcome true by construction. A column
+# missing from this dict falls back to its own available_at_h (no overlap risk assumed) --
+# correct for every point-in-time value (an open, a close, a sign() of two point values, a
+# purely-historical column) and for a column merely being COMPARED against inside an outcome
+# without itself needing new data (e.g. H015's `ny_close < lon_high` -- lon_high is long since
+# resolved by h=5, nowhere near decision_time_h=16, so it's excluded by the availability half of
+# the check regardless of what's listed here).
+#
+# Every entry below is a genuine path-dependent AGGREGATE over a window (a high, low, range, the
+# TIME an extreme occurred, or a boolean that scans for a level being crossed) -- its value can
+# be swung by ANYTHING that happened anywhere in that window, which is exactly the overlap risk
+# a point-in-time open/close doesn't have (see nylab.sessions.column_starts_at_h's docstring for
+# why that module does NOT carve out the same open/close exception).
+COLUMN_STARTS_AT_H = {
+    "day_high": -7, "day_low": -7, "day_hi_t": -7, "day_lo_t": -7, "day_range": -7,
+    "asia_high": -4, "asia_low": -4, "asia_hi_t": -4, "asia_lo_t": -4, "asia_range": -4,
+    "lon_high": 2, "lon_low": 2, "lon_hi_t": 2, "lon_lo_t": 2, "lon_range": 2,
+    "preny_high": 7, "preny_low": 7, "preny_hi_t": 7, "preny_lo_t": 7,
+    "ny_high": 7, "ny_low": 7, "ny_hi_t": 7, "ny_lo_t": 7, "ny_range": 7,
+    "nyam_high": 7, "nyam_low": 7, "nyam_hi_t": 7, "nyam_lo_t": 7,
+    "cbdr_high": -10, "cbdr_low": -10, "cbdr_range": -10,  # CBDR spans td-1 17:00-23:00 NY == h in [-10,-4)
+    "tilopen_high": -7, "tilopen_low": -7, "adr_used_0930": -7,
+    "ny_takes_lon_high": 7, "ny_takes_lon_high_t": 7, "ny_takes_lon_low": 7, "ny_takes_lon_low_t": 7,
+    "ny_takes_pdh": 7, "ny_takes_pdh_t": 7, "ny_takes_pdl": 7, "ny_takes_pdl_t": 7,
+    "ny_takes_asia_high": 7, "ny_takes_asia_high_t": 7, "ny_takes_asia_low": 7, "ny_takes_asia_low_t": 7,
+    "pre_takes_lon_high": 7, "pre_takes_lon_low": 7, "pre_takes_pdh": 7, "pre_takes_pdl": 7,
+    "ny_close_back_below_lon_high": 7, "ny_close_back_above_lon_low": 7,
+    "ny_hits_asia_+1sd": 7, "ny_hits_asia_-1sd": 7, "ny_hits_asia_+2sd": 7, "ny_hits_asia_-2sd": 7,
+    "ny_hits_asia_+2.5sd": 7, "ny_hits_asia_-2.5sd": 7,
+    "ny_forms_day_high": -7, "ny_forms_day_low": -7,
+    "r0930_1600": 9.5, "r0930_1600_rel": 9.5,
+}
+COLUMN_STARTS_AT_H.update(calendar_features.column_starts_at_h())
 
 
 def window(df: pd.DataFrame, lo: float, hi: float, name: str) -> pd.DataFrame:
@@ -105,6 +153,20 @@ def build_days(df: pd.DataFrame, C: dict) -> pd.DataFrame:
     pre = window(df, -7, 9.5, "tilopen")
     d = d.join(pre[["tilopen_high", "tilopen_low"]])
     d["adr_used_0930"] = (d.tilopen_high - d.tilopen_low) / pip / d.adr5
+
+    # ROADMAP 5.7.2: r0930_1600 -- the 09:30-16:00 range, in pips. This is ny_range's own window
+    # ([7,16), see C["ny"]) narrowed to start at 09:30, giving a decision_time_h=9.5 hypothesis a
+    # legitimate post-decision outcome instead of ny_range (whose 07:00-09:30 portion is exactly
+    # the same price action a 9.5-decision condition like adr_used_0930 already used -- verified
+    # 2026-09-26, RESEARCH_PROTOCOL.md S3, ROADMAP 5.7 H013). r0930_1600_rel divides by the
+    # PRIOR 20 trading days' median (shift(1) first, same "excludes the current day" convention
+    # as nylab.sessions's own RANGE_REL_LOOKBACK) -- never the full-sample median 5.7.1 just
+    # banned from `condition`, and not needed here anyway since this is an `outcome` column.
+    r0930 = window(df, 9.5, 16, "r0930_1600_w")
+    d = d.join(r0930[["r0930_1600_w_high", "r0930_1600_w_low"]])
+    d["r0930_1600"] = (d["r0930_1600_w_high"] - d["r0930_1600_w_low"]) / pip
+    d = d.drop(columns=["r0930_1600_w_high", "r0930_1600_w_low"])
+    d["r0930_1600_rel"] = d["r0930_1600"] / d["r0930_1600"].shift(1).rolling(20, min_periods=20).median()
 
     for lvl, col, above in [("lon_high", "ny_takes_lon_high", True), ("lon_low", "ny_takes_lon_low", False),
                             ("pdh", "ny_takes_pdh", True), ("pdl", "ny_takes_pdl", False),

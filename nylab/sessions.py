@@ -428,3 +428,27 @@ def column_docs(sessions_cfg: dict) -> dict[str, float]:
     docs["day_outside_prev_range"] = 17.0
     docs["day_type"] = 17.0
     return docs
+
+
+def column_starts_at_h(sessions_cfg: dict) -> dict[str, float]:
+    """ROADMAP 5.7.2: starts_at_h for every column this module produces -- merged into
+    nylab.days.COLUMN_STARTS_AT_H the same way column_docs() merges into COLUMN_DOCS. Every one
+    of these (range_pips, range_rel, er, close_loc, character, ...) is derived from that
+    session's own OHLC path, so it genuinely needs the WHOLE session window (a big early move
+    inside the window can flip range_rel/er/character just as easily as a late one) -- same
+    conservative "needs the whole window" treatment as that session's own raw _high/_low, even
+    for columns like `open`/`close` that could in principle be argued point-like: no currently
+    loaded hypothesis's outcome references a session-level open/close/dir, so there is no reason
+    to carve out that narrower exception here the way nylab.days does for the DAY table's own
+    _close/_dir columns (see nylab.days.COLUMN_STARTS_AT_H's docstring)."""
+    docs = {}
+    for sid in SESSION_IDS:
+        prefix = _WIDE_PREFIX.get(sid, sid)
+        lo = sessions_cfg[sid][0]  # S1's "Starts (h)" column -- the window's own lo bound
+        cols = _NEW_COLS if sid in _LEGACY_DUP else _RAW_COLS + _NEW_COLS
+        for c in cols:
+            docs[f"{prefix}_{c}"] = lo
+    docs["day_inside_prev_range"] = -7.0
+    docs["day_outside_prev_range"] = -7.0
+    docs["day_type"] = -7.0
+    return docs

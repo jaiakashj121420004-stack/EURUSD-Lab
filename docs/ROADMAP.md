@@ -145,14 +145,35 @@ The machinery must make these mistakes impossible, not just fixed once.
       found in) bumped to v1.1 with `quantile_prior(asia_range, 0.2)` in its condition -- its
       v1.0 ledger rows are untouched (append-only). H014 v1.1's `outcome` still uses the
       overlapping `ny_range` window; that's 5.7.2/5.7.4's job, not bundled in here.
-- [ ] 5.7.2 `COLUMN_DOCS` gains `starts_at_h`; loader rejects an `outcome` with
+- [x] 5.7.2 `COLUMN_DOCS` gains `starts_at_h`; loader rejects an `outcome` with
       `starts_at_h < decision_time_h`. Add clean post-decision outcome columns, e.g. `r0930_1600`
-      (09:30–16:00 range, pips) and its `_rel` version vs prior-20-day median.
+      (09:30–16:00 range, pips) and its `_rel` version vs prior-20-day median. Done 2026-09-27:
+      `nylab/days.py::COLUMN_STARTS_AT_H` (+ the same in `nylab/sessions.py` and
+      `nylab/calendar_features.py`, merged by `hyp_loader.py` exactly like `COLUMN_DOCS` already
+      was) registers every column whose measurement window genuinely starts before its
+      available_at_h -- only the true path-dependent aggregates (a high/low/range, an
+      extreme's timestamp, a level-crossing scan); a column absent from it falls back to its own
+      available_at_h (no overlap risk), which is what keeps a point-in-time value like `ny_close`
+      (and `ny_drive`, built from it) out of scope. `hyp_loader.py::_check_outcome_window()`
+      rejects an `outcome` column only when it is BOTH still unresolved at decision time AND its
+      window dips back before it -- that two-part test is what correctly rejects H013's old
+      `ny_range` outcome while correctly leaving H015's `ny_close < lon_high` (a long-since-
+      resolved comparison level) and H016's `nyam_kz.character` alone. New `r0930_1600` /
+      `r0930_1600_rel` outcome columns added to `nylab/days.py::build_days()` for exactly the
+      9.5-decision case this was built for. H013 bumped to v1.1 (see 5.7.4 note below) since the
+      new check would otherwise refuse to load the still-installed v1.0 file.
 - [ ] 5.7.3 Engine: p from **IS only**; two-proportion test condition vs complement; true Wilson CI;
       5-td embargo between IS and OOS; `direction` field (as_claimed / opposite); effect in pips.
-- [ ] 5.7.4 Re-issue H013/H014 as **v1.1** with prior-only thresholds, post-09:30 outcomes and
+- [~] 5.7.4 Re-issue H013/H014 as **v1.1** with prior-only thresholds, post-09:30 outcomes and
       correctly-directed titles (m += 2). H015 re-labelled *descriptive* (decision 16:00 = outcome time,
-      nothing left to predict). Expected result from the 2026-09-26 check: both noise.
+      nothing left to predict). Expected result from the 2026-09-26 check: both noise. Partly done:
+      H013 v1.1 (outcome -> `r0930_1600`, 2026-09-27, forced by 5.7.2) and H014 v1.1 (condition ->
+      `quantile_prior`, 2026-09-27, forced by 5.7.1) both landed already, out of necessity rather
+      than as this ticket's own deliberate step -- neither hypothesis has been RE-RUN against the
+      real 5-year cache yet to see if the effect is still noise as the 2026-09-26 review predicted
+      (that needs `nylab run` against the real cache, not just the synthetic-fixture test suite),
+      and titles/H015-relabelling are still untouched. Left as `[~]` rather than `[x]` for that
+      reason.
 - [ ] 5.7.5 Model verdict: OOS n ≥ 100 and CI upper < 0 → `negative` (new verdict word, Akash to
       confirm). `london_sweep_reversal` v1.0 becomes `negative`.
 - [ ] 5.7.6 **Artifact-catching fixtures** (the mistake-proofing): a synthetic 5-yr series with two

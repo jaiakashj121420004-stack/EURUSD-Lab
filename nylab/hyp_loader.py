@@ -14,6 +14,13 @@ full-sample `quantile()`/`median()` DSL functions (verified 2026-09-26 to leak t
 same way a too-late column does, see nylab.hyp_dsl's module docstring). Only the `_prior`
 variants (`quantile_prior`, `median_prior`) are allowed in `condition`; `outcome`/`baseline` are
 unrestricted, same as the look-ahead check above.
+
+ROADMAP 5.7.2: a THIRD check covers the other direction -- `outcome` may not use a column whose
+measurement window starts before decision_time_h while the column is still otherwise unresolved
+at decision time (see nylab.days.COLUMN_STARTS_AT_H's docstring for the exact rule and why
+RESEARCH_PROTOCOL.md S3's H013 example, `ny_range` for a 9.5-decision hypothesis, is exactly what
+this catches, while `outcome: ny_close < lon_high` for a 16-decision hypothesis is correctly left
+alone).
 """
 from __future__ import annotations
 
@@ -27,7 +34,7 @@ import yaml
 from nylab import config as _cfg
 from nylab import hyp_dsl
 from nylab import sessions as _sessions_mod
-from nylab.days import COLUMN_DOCS
+from nylab.days import COLUMN_DOCS, COLUMN_STARTS_AT_H
 
 # ROADMAP 5.4: a hypothesis's condition may reference a SESSION-table column (`lon.character`,
 # `nyam_kz.character`, ...). Those columns only exist in COLUMN_DOCS once nylab.sessions has
@@ -38,6 +45,7 @@ from nylab.days import COLUMN_DOCS
 # hypothesis check`). So this module -- which every one of those paths already imports before
 # touching a hypothesis file -- does the merge itself, once, at import time.
 COLUMN_DOCS.update(_sessions_mod.column_docs(_cfg.sessions()))
+COLUMN_STARTS_AT_H.update(_sessions_mod.column_starts_at_h(_cfg.sessions()))  # ROADMAP 5.7.2, same reasoning
 
 
 class HypothesisLoadError(ValueError):
@@ -73,6 +81,31 @@ def _check_lookahead(hyp_id: str, condition: str, decision_time_h: float) -> Non
                 f"{hyp_id}: condition {condition!r} uses column '{col}' (available_at_h={avail}) "
                 f"but decision_time_h={decision_time_h} -- this would leak the future. Either fix "
                 f"the condition or move decision_time_h to >= {avail}."
+            )
+
+
+def _check_outcome_window(hyp_id: str, outcome: str, decision_time_h: float) -> None:
+    """ROADMAP 5.7.2. A column is only a real overlap risk if it's BOTH (a) not yet resolved at
+    decision time (available_at_h > decision_time_h -- it's a genuine future measurement) AND
+    (b) its window nonetheless dips back before decision time (starts_at_h < decision_time_h).
+    Both conditions matter: without (a), this would wrongly reject `outcome: ny_close < lon_high`
+    for a decision_time_h=16 hypothesis (H015) just for comparing against the long-since-resolved
+    lon_high; without (b), every ordinary outcome (which is BY DEFINITION not yet resolved at
+    decision time) would be rejected. A column absent from COLUMN_STARTS_AT_H falls back to its
+    own available_at_h (see that dict's docstring for which columns are safe to omit)."""
+    tree = hyp_dsl.parse(outcome)
+    hyp_dsl.validate(tree)
+    for col in hyp_dsl.referenced_columns(tree):
+        avail = COLUMN_DOCS.get(col)
+        starts = COLUMN_STARTS_AT_H.get(col, avail)
+        if avail is not None and starts is not None and avail > decision_time_h and starts < decision_time_h:
+            raise HypothesisLoadError(
+                f"{hyp_id}: outcome {outcome!r} uses column '{col}' whose measurement window "
+                f"starts at h={starts}, before decision_time_h={decision_time_h} -- part of its "
+                f"value is already baked in by the time the decision is made (a big pre-decision "
+                f"move can make both condition and outcome true by construction, RESEARCH_PROTOCOL"
+                f".md S3). Use a column whose window starts at or after decision_time_h instead "
+                f"(e.g. r0930_1600 in place of ny_range for a 9.5-decision hypothesis)."
             )
 
 
@@ -132,6 +165,7 @@ def load_one(path: str) -> Hypothesis:
         hyp_dsl.validate(hyp_dsl.parse(hyp.baseline))
     _check_prior_only(hyp.id, hyp.condition)
     _check_lookahead(hyp.id, hyp.condition, hyp.decision_time_h)
+    _check_outcome_window(hyp.id, hyp.outcome, hyp.decision_time_h)
     return hyp
 
 

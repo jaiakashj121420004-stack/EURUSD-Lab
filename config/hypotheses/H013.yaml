@@ -1,8 +1,17 @@
 id: H013
-version: '1.0'
+version: '1.1'
 title: ADR used by 09:30 > 80% -> NY range below its median
 decision_time_h: 9.5
 condition: adr_used_0930 > 0.8
-outcome: ny_range < median(ny_range)
-baseline: ny_range < median(ny_range)
-notes: Ported verbatim from v0/nylab.hypotheses H013.
+outcome: r0930_1600 < median(r0930_1600)
+baseline: r0930_1600 < median(r0930_1600)
+notes: >-
+  v1.0 (ported verbatim from v0/nylab.hypotheses H013) used `ny_range` (07:00-16:00) as its
+  outcome even though decision_time_h=9.5 -- the 2026-09-26 review found this meant a big
+  07:00-09:30 move (the SAME move `condition` reads via adr_used_0930) made both condition and
+  outcome true by construction (RESEARCH_PROTOCOL.md S3). Measured with the outcome restricted
+  to 09:30-16:00: IS +6pp p=0.06, OOS +2pp p=0.67, median 43 vs 41 pips -- the effect vanished.
+  v1.1 swaps in `r0930_1600` (ROADMAP 5.7.2's new post-09:30 outcome column, added specifically
+  for this fix) so the outcome only measures price action a trader could not have already
+  priced in when the decision was made. v1.0's ledger rows (research/ledger.csv) are untouched
+  -- this is a NEW (id, version) pair, m += 1, not a rewrite of history.

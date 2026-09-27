@@ -208,19 +208,83 @@ def test_condition_calling_quantile_prior_is_accepted(tmp_path):
 
 
 def test_outcome_and_baseline_may_still_use_full_sample_quantile_and_median(tmp_path):
-    """The ban is on `condition` only -- `outcome`/`baseline` describe the measured result
-    against a fixed yardstick, which is not a look-ahead leak."""
+    """The 5.7.1 ban on plain quantile()/median() is on `condition` only -- `outcome`/`baseline`
+    describe the measured result against a fixed yardstick, which is not a look-ahead leak.
+    Uses decision_time_h=0 here (not 9.5) specifically so this test exercises ONLY the 5.7.1
+    prior-only-functions rule, not the separate 5.7.2 outcome-window rule -- ny_range's window
+    starts at h=7, which is fine for a decision made at h=0 (see
+    test_outcome_window_overlap_is_rejected below for the 5.7.2 case where it isn't)."""
     path = _write(tmp_path, "outcome_full_sample.yaml", """
         id: HOUTFS
         version: "1.0"
         title: "full-sample median is fine in outcome/baseline"
-        decision_time_h: 9.5
-        condition: "pre_takes_lon_high"
+        decision_time_h: 0
+        condition: "asia_range > 0"
         outcome: "ny_range > median(ny_range)"
         baseline: "ny_range > median(ny_range)"
     """)
     hyp = load_one(path)
     assert hyp.id == "HOUTFS"
+
+
+def test_outcome_window_overlap_is_rejected(tmp_path):
+    """ROADMAP 5.7.2 -- exactly the bug verified in H013 on 2026-09-26: `ny_range` spans
+    07:00-16:00, so for a decision made at 09:30 the outcome's window dips back before the
+    decision, baking in the same 07:00-09:30 move a same-window condition might already read."""
+    path = _write(tmp_path, "bad_outcome_window.yaml", """
+        id: HBADWIN
+        version: "1.0"
+        title: "outcome window overlaps the decision"
+        decision_time_h: 9.5
+        condition: "adr_used_0930 > 0.8"
+        outcome: "ny_range < median(ny_range)"
+        baseline: "ny_range < median(ny_range)"
+    """)
+    with pytest.raises(HypothesisLoadError, match="ny_range"):
+        load_one(path)
+
+
+def test_outcome_window_starting_at_decision_time_is_accepted(tmp_path):
+    """ROADMAP 5.7.2's own fix for the H013 case: r0930_1600 starts exactly at decision_time_h
+    (9.5) -- 'at or after decision time' (RESEARCH_PROTOCOL.md S3) is fine, only strictly BEFORE
+    is rejected."""
+    path = _write(tmp_path, "good_outcome_window.yaml", """
+        id: HGOODWIN
+        version: "1.0"
+        title: "outcome window starts exactly at decision time"
+        decision_time_h: 9.5
+        condition: "adr_used_0930 > 0.8"
+        outcome: "r0930_1600 < median(r0930_1600)"
+        baseline: "r0930_1600 < median(r0930_1600)"
+    """)
+    hyp = load_one(path)
+    assert hyp.id == "HGOODWIN"
+
+
+def test_outcome_referencing_an_already_resolved_column_is_not_flagged(tmp_path):
+    """ROADMAP 5.7.2's other half: a column that's fully resolved LONG before decision_time_h
+    (lon_high, available_at_h=5) isn't a leak just because SOME of its own window predates the
+    decision -- it's not a genuine future measurement at all by the time this decision is made.
+    Mirrors the real H015 (decision_time_h=16, outcome 'ny_close < lon_high')."""
+    path = _write(tmp_path, "resolved_ref.yaml", """
+        id: HRESOLVED
+        version: "1.0"
+        title: "already-resolved column referenced in outcome"
+        decision_time_h: 16
+        condition: "ny_takes_lon_high"
+        outcome: "ny_close < lon_high"
+        baseline_p0: 0.5
+    """)
+    hyp = load_one(path)
+    assert hyp.id == "HRESOLVED"
+
+
+def test_h013_v1_1_loads_with_the_post_decision_outcome_column():
+    """Confirms the actual config/hypotheses/H013.yaml file on disk was fixed to v1.1."""
+    hyps = load_all("config/hypotheses")
+    h013 = next(h for h in hyps if h.id == "H013")
+    assert h013.version == "1.1"
+    assert h013.outcome == "r0930_1600 < median(r0930_1600)"
 
 
 def test_h014_v1_1_loads_with_a_prior_only_condition():

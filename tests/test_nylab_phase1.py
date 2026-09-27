@@ -92,11 +92,65 @@ def test_hypotheses_csv_matches_golden(nylab_run):
     assert new["id"].iloc[15] == "H016"
     ported = new.iloc[:15]
     h014_row = ported.index[ported["id"] == "H014"][0]
+    # ROADMAP 5.7.2 (2026-09-27): H013 is ALSO expected to diverge now -- v1.1 swaps its outcome
+    # from `ny_range` to the new post-decision `r0930_1600` column (v0's outcome window started
+    # before its own decision_time_h=9.5, RESEARCH_PROTOCOL.md S3). H013's condition is
+    # unchanged, so its `n`/`oos_n` (which depend only on condition) still match v0 exactly --
+    # only the outcome-dependent columns (hit, baseline, is_hit, oos_hit) actually move; excluded
+    # wholesale here anyway for the same reason as H014, rather than tracking that distinction.
+    h013_row = ported.index[ported["id"] == "H013"][0]
     for col in ("n", "hit", "baseline", "is_hit", "oos_hit", "oos_n"):
         diff = (gold[col].astype(float) - ported[col].astype(float)).abs()
         ok = (diff <= 1e-9) | (gold[col].isna() & ported[col].isna())
         ok.loc[h014_row] = True  # H014 v1.1's prior-only condition intentionally changes n/hit
+        ok.loc[h013_row] = True  # H013 v1.1's post-decision outcome intentionally changes hit
         assert ok.all(), f"{col} diverged from v0 golden at row(s) {list(diff[~ok].index)}"
+
+
+def test_r0930_1600_matches_a_manual_09_30_16_00_range_and_has_no_lookahead():
+    """ROADMAP 5.7.2's new outcome column: verifies its VALUE against a hand-computed range from
+    the raw bars (not just that it runs), and that it doesn't need bars past 16:00 (AT-03-style
+    truncation check, same pattern as test_window_helper_has_no_lookahead)."""
+    from nylab import config as cfg
+    from nylab import days as days_mod
+    from nylab.data import loader, timezones
+
+    raw = loader.load_bars(str(FIXTURE))
+    raw["ny"] = timezones.to_new_york(raw["server"], "ny+7")
+    raw["td"] = (raw["ny"] + pd.Timedelta(hours=7)).dt.normalize()
+    raw["h"] = (raw["ny"] - (raw["td"] - pd.Timedelta(hours=7))).dt.total_seconds() / 3600.0 - 7
+    raw = raw[raw["td"].dt.dayofweek < 5].reset_index(drop=True)
+
+    pip = cfg.legacy_windows()["pip"]
+    d = days_mod.build_days(raw, cfg.legacy_windows())
+    assert "r0930_1600" in d.columns and "r0930_1600_rel" in d.columns
+
+    sample_td = d.index[len(d) // 2]
+    window_bars = raw[(raw.td == sample_td) & (raw.h >= 9.5) & (raw.h < 16)]
+    assert len(window_bars) > 0
+    manual_range = (window_bars.high.max() - window_bars.low.min()) / pip
+    assert d.at[sample_td, "r0930_1600"] == pytest.approx(manual_range, abs=1e-9)
+
+    # AT-03: truncating the bar stream right after 16:00 must not change the value for that day.
+    cutoff = raw[(raw.td == sample_td) & (raw.h >= 16)].index.min()
+    assert pd.notna(cutoff), "fixture doesn't have bars at/after h=16 on the sampled day"
+    truncated = raw.loc[: cutoff - 1]
+    d_trunc = days_mod.build_days(truncated, cfg.legacy_windows())
+    assert d_trunc.at[sample_td, "r0930_1600"] == pytest.approx(d.at[sample_td, "r0930_1600"], abs=1e-9)
+
+
+def test_column_starts_at_h_registers_the_new_outcome_column_and_the_h013_trap_column():
+    from nylab.days import COLUMN_DOCS, COLUMN_STARTS_AT_H
+
+    # r0930_1600 must start exactly at 9.5 (not before) -- that's the whole point of adding it.
+    assert COLUMN_STARTS_AT_H["r0930_1600"] == 9.5
+    assert COLUMN_DOCS["r0930_1600"] == 16
+    # ny_range is still registered as starting at 7 -- it wasn't changed, just avoided for H013.
+    assert COLUMN_STARTS_AT_H["ny_range"] == 7
+    # A point-in-time column (never listed in COLUMN_STARTS_AT_H) has no overlap risk at all --
+    # confirmed by its ABSENCE, which nylab.hyp_loader's `.get(col, avail)` relies on.
+    assert "ny_close" not in COLUMN_STARTS_AT_H
+    assert "ny_drive" not in COLUMN_STARTS_AT_H
 
 
 def test_summary_json_written(nylab_run):

@@ -3,7 +3,7 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 5.7 (statistics integrity) in progress -- 5.7.1 done (prior-only DSL thresholds), 5.7.2-5.7.6 queued. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR).
+## Status: Phase 5.7 (statistics integrity) in progress -- 5.7.1 and 5.7.2 done (prior-only DSL thresholds; starts_at_h + post-decision outcome column), 5.7.3/5.7.5/5.7.6 queued, 5.7.4 partly done. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR).
 
 Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
 call: keep building through the phases on the automated tests alone, and he'll sit down and look
@@ -902,13 +902,66 @@ check for everyone else.
 acceptance + the real H014.yaml file actually loading as v1.1), 3/3 `tests/test_hyp_engine_at.py`
 (AT-01/AT-02 unaffected), full suite 149/149.
 
-**Not done yet (queued, in ROADMAP order):** 5.7.2 (`starts_at_h` per column + loader rejects an
-`outcome` starting before `decision_time_h` + new `r0930_1600`/`r0930_1600_rel` columns) --
-`starts_at_h` for every `COLUMN_DOCS` entry has been hand-derived from `nylab/days.py`'s actual
-window-open hours (not guessed) but not yet written into code; 5.7.3 (engine: IS-only p,
-two-proportion test vs complement, true Wilson CI -- `nylab/stats.py::wilson_ci()` is currently
-a mislabeled Wald interval, not real Wilson -- 5-td embargo, `direction` field, effect in pips);
-5.7.4 (re-issue H013/H014 as v1.1 in full -- post-09:30 outcomes, correctly-directed titles,
-re-label H015 descriptive); 5.7.5 (new `negative` verdict word); 5.7.6 (AT-05 artifact-catching
-fixtures). Design restyle of the replay trainer and research report also still pending, to start
-only after 5.7 is fully done, in its own separate commit stream.
+**Not done yet (queued, in ROADMAP order):** 5.7.3 (engine: IS-only p, two-proportion test vs
+complement, true Wilson CI -- `nylab/stats.py::wilson_ci()` is currently a mislabeled Wald
+interval, not real Wilson -- 5-td embargo, `direction` field, effect in pips); 5.7.4's REMAINING
+scope (re-running H013/H014 v1.1 against the real cache, correctly-directed titles, re-label
+H015 descriptive -- see the 5.7.2 entry below for what already landed early); 5.7.5 (new
+`negative` verdict word); 5.7.6 (AT-05 artifact-catching fixtures). Design restyle of the replay
+trainer and research report also still pending, to start only after 5.7 is fully done, in its
+own separate commit stream.
+
+## 2026-09-27 — Phase 5.7.2: starts_at_h + a clean post-decision outcome column (2 of 6)
+
+**5.7.2 done.** `nylab/days.py` adds `COLUMN_STARTS_AT_H` -- a SECOND registry parallel to
+`COLUMN_DOCS` (available_at_h), holding the earliest NY hour whose raw bars genuinely feed a
+column's value. The two differ only for genuine path-dependent aggregates (a high/low/range, the
+timestamp of an extreme, a level-crossing scan) -- a column absent from it falls back to its own
+available_at_h via `.get(col, avail)`, which is deliberately correct for every point-in-time
+value (an open, a close, a `sign()` of two point values, anything purely historical by day open)
+and for a column merely being COMPARED against in an outcome without itself needing new data.
+Same parallel dict added to `nylab/sessions.py::column_starts_at_h()` (session character/day_type
+columns -- conservatively treated as full-window aggregates throughout, no open/close carve-out
+there, since nothing currently depends on that narrower distinction) and
+`nylab/calendar_features.py::column_starts_at_h()` (session event-count/max-|z| columns); all
+three merge into `nylab.hyp_loader`'s registries exactly the way `COLUMN_DOCS` already merged.
+
+`nylab/hyp_loader.py::_check_outcome_window()` is the new loader check: it rejects an `outcome`
+column only when BOTH (a) it's still unresolved at decision time (`available_at_h >
+decision_time_h`) AND (b) its window nonetheless starts before decision time (`starts_at_h <
+decision_time_h`). Both halves matter -- without (a), `outcome: ny_close < lon_high` for H015
+(decision_time_h=16) would be wrongly rejected just for comparing against the long-resolved
+`lon_high`; without (b), literally every ordinary outcome (which is BY DEFINITION not yet
+resolved at decision time) would be. Verified this two-part rule against all 16 real hypotheses
+by hand before writing the code: only H013 (`ny_range`, decision_time_h=9.5) actually trips it;
+H001-H012's `ny_drive` outcome, H014's `ny_range` (decision_time_h=0, so 7 is not < 0), H015's
+`ny_close`/`lon_high`, and H016's `nyam_kz.character` all correctly pass.
+
+**New outcome column:** `r0930_1600` (09:30-16:00 range, pips -- exactly ny_range's own window
+narrowed to start at decision_time_h=9.5) and `r0930_1600_rel` (divided by the PRIOR 20 trading
+days' median, `shift(1)` first so today is excluded, same convention as `nylab.sessions`'s own
+`RANGE_REL_LOOKBACK`). Added to `nylab/days.py::build_days()` right after `adr_used_0930`.
+
+**H013 forced to v1.1** (same reasoning as H014 in the 5.7.1 entry above): the new outcome-window
+check would otherwise refuse to load the still-installed v1.0 file, since its outcome was exactly
+`ny_range` -- the RESEARCH_PROTOCOL.md S3 worked example this whole ticket is named after ("H013
+decides at 09:30 but its outcome ny_range covers 07:00-16:00, so a big 07:00-09:30 move makes
+both condition and outcome true by construction"). v1.1's outcome/baseline are now
+`r0930_1600 < median(r0930_1600)`. v1.0's ledger rows are untouched (append-only, new (id,
+version) pair). Condition unchanged (`adr_used_0930 > 0.8` has no full-sample quantile/median
+call, so it never needed a 5.7.1 fix). **Not yet done:** actually re-running H013 v1.1 against
+the real 5-year cache to confirm it comes out `noise` as the 2026-09-26 review predicted (median
+43 vs 41 pips, p=0.06/0.67) -- that's part of 5.7.4's remaining scope, needs the full engine
+rework (5.7.3) to report honestly first, not worth running today just to get thrown-away numbers
+from the current IS+OOS-combined p-value logic.
+
+**Expected and accepted test-suite consequence (same pattern as 5.7.1's H014 exclusion):**
+`test_hypotheses_csv_matches_golden` now also excludes H013's row from strict v0 parity --
+its `n`/`oos_n` (condition-only) still match exactly, but `hit`/`baseline`/`is_hit`/`oos_hit`
+(outcome-dependent) now legitimately differ.
+
+**Verified:** new tests in `tests/test_hyp_loader.py` (outcome-window rejection, acceptance at
+exactly decision_time_h, the already-resolved-reference exemption, H013 v1.1 loading for real)
+and `tests/test_nylab_phase1.py` (`r0930_1600` checked against a hand-computed range from raw
+bars, an AT-03-style truncation-safety check, and that `COLUMN_STARTS_AT_H`/`COLUMN_DOCS` are
+registered correctly). Full suite 155/155.
