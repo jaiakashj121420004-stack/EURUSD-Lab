@@ -133,7 +133,10 @@ th { color: var(--text-3); font-weight: 600; }
 tr.dayRow { cursor: pointer; transition: background var(--t-fast) var(--ease-glide); }
 tr.dayRow:hover { background: rgba(var(--accent-rgb), .08); }
 tr.dayRow.active { background: rgba(var(--accent-rgb), .16); }
-tr.dayRow.spoiler td { opacity: .45; }
+tr.dayRow.spoiler {
+  opacity: .55;
+  background-image: repeating-linear-gradient(135deg, rgba(var(--text-3-rgb),.10) 0 6px, transparent 6px 12px);
+}
 
 #chartArea { display: flex; flex-direction: column; }
 #chart { flex: 1; position: relative; }
@@ -165,3 +168,99 @@ tr.dayRow.spoiler td { opacity: .45; }
    fills stay 100% contrast for candles/wicks, only their own translucency ever changes). */
 .sessionBox { position: absolute; top: 0; bottom: 0; pointer-events: none; z-index: 1; }
 #chart.dragging-line { cursor: ns-resize; }
+
+/* ---------------------------------------------------------------- responsive (DESIGN_SYSTEM.md
+   S8): >=1440 the original 3-column grid; 1024-1439 chart + account panel, nav becomes a drawer;
+   600-1023 chart only, both nav and account become drawers; <600 phone, chart-first stacked
+   column with a bottom sheet (tabs above #layout) standing in for both drawers. Drawer buttons
+   and the sheet tab bar are inert (hidden) outside the ranges that need them. */
+.drawerBtn, #sheetTabs { display: none; }
+.drawerBtn svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; }
+#overlayDim {
+  position: fixed; inset: 0; background: rgba(0,0,0,.32); opacity: 0; pointer-events: none;
+  transition: opacity var(--t-med) var(--ease-glide); z-index: 60;
+}
+#overlayDim.on { opacity: 1; pointer-events: auto; }
+
+@media (max-width: 1439px) {
+  #layout { grid-template-columns: 1fr; }
+  #navToggle { display: flex; }
+  #navigator {
+    position: fixed; top: 53px; bottom: 0; left: 0; width: min(300px, 86vw); z-index: 70;
+    transform: translateX(-105%); transition: transform var(--t-med) var(--ease-glide);
+    border-radius: 0 var(--radius-island) var(--radius-island) 0;
+  }
+  #navigator.open { transform: translateX(0); box-shadow: 8px 0 24px var(--shadow-dark); }
+}
+@media (min-width: 1024px) and (max-width: 1439px) {
+  #layout { grid-template-columns: 1fr 260px; }
+}
+@media (max-width: 1023px) {
+  #layout { grid-template-columns: 1fr; }
+  #acctToggle { display: flex; }
+  #accountPanel {
+    position: fixed; top: 53px; bottom: 0; right: 0; width: min(300px, 86vw); z-index: 70;
+    transform: translateX(105%); transition: transform var(--t-med) var(--ease-glide);
+    border-radius: var(--radius-island) 0 0 var(--radius-island);
+  }
+  #accountPanel.open { transform: translateX(0); box-shadow: -8px 0 24px var(--shadow-dark); }
+}
+
+/* Phone: chart-first stacked column, bottom sheet stands in for both drawers. */
+@media (max-width: 599px) {
+  html, body { max-width: 100vw; overflow-x: hidden; }
+  #topbar { padding: 8px 10px; gap: 10px; overflow-x: auto; scrollbar-width: none; }
+  #topbar::-webkit-scrollbar { display: none; }
+  #layout { display: flex; flex-direction: column; height: calc(100dvh - 53px); height: calc(100vh - 53px); }
+  #chartArea { flex: 1 1 auto; min-height: 0; }
+  #playbar { flex-wrap: wrap; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); }
+
+  #sheetTabs { display: flex; gap: 6px; padding: 6px 10px; }
+  #sheetTabs button { flex: 1; border-radius: var(--radius-pill); padding: 7px 0; font-size: 12px; font-weight: 700; }
+  #sheetTabs button.active { color: var(--accent); box-shadow: inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light); }
+
+  /* Both panels dock to the same fixed bottom slot; only the active tab's panel is shown --
+     an unstyled peek/drag sheet would need real gesture JS, out of scope for this pass, so this
+     is a simple show/hide toggle (docs/DESIGN_SYSTEM.md's own #4 note: mocked ahead-only features
+     like a draggable sheet stay in preview.html until their own phase). */
+  #navigator, #accountPanel {
+    position: fixed !important; left: 0; right: 0; bottom: 0; top: auto; width: 100%;
+    max-height: 70dvh; max-height: 70vh; overflow-y: auto; transform: none !important;
+    border-radius: var(--radius-island) var(--radius-island) 0 0;
+    padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
+    box-shadow: 0 -6px 20px var(--shadow-dark); z-index: 65;
+    display: none;
+  }
+  #navigator.sheetActive, #accountPanel.sheetActive { display: block; }
+  #navToggle, #acctToggle { display: none; }
+
+  /* Day table -> cards (DESIGN_SYSTEM.md S8: "day table becomes cards" on phones). */
+  #dayTableWrap table, #dayTableWrap tbody, #dayTableWrap tr, #dayTableWrap td { display: block; width: 100%; }
+  #dayTableWrap thead { display: none; }
+  #dayTableWrap tr.dayRow {
+    margin-bottom: 8px; border-radius: var(--radius-card); padding: 8px 12px;
+    box-shadow: 4px 4px 10px var(--shadow-dark), -4px -4px 10px var(--shadow-light);
+  }
+  #dayTableWrap tr.dayRow.active { box-shadow: inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light); }
+  #dayTableWrap td { border: none; padding: 2px 0; display: flex; justify-content: space-between; gap: 8px; }
+  #dayTableWrap td::before { content: attr(data-label); color: var(--text-3); font-size: 11px; }
+}
+@media (min-width: 600px) { #sheetTabs { display: none; } }
+
+/* ---------- info-icon tooltip (tap-accessible, not hover-only -- DESIGN_SYSTEM.md S9) ---------- */
+.info-icon {
+  width: 15px; height: 15px; min-width: 15px; padding: 0; border-radius: 50%; font-size: 10px;
+  font-weight: 700; font-style: italic; font-family: var(--font-mono, monospace); line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--text-3);
+  background: var(--base); box-shadow: 2px 2px 5px var(--shadow-dark), -2px -2px 5px var(--shadow-light);
+  cursor: pointer; flex-shrink: 0; margin-left: 3px;
+}
+.info-icon:hover { color: var(--accent); }
+.row-with-tip { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tooltip-pop {
+  position: fixed; z-index: 90; max-width: 240px; padding: 10px 12px; border-radius: 12px;
+  font-size: 11.5px; color: var(--text-2); background: var(--base);
+  transform: scale(.94); opacity: 0; pointer-events: none;
+  transition: transform var(--t-fast) var(--ease-glide), opacity var(--t-fast) var(--ease-glide);
+}
+.tooltip-pop.open { transform: scale(1); opacity: 1; pointer-events: auto; }

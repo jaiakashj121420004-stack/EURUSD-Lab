@@ -134,7 +134,7 @@ function renderDayTable() {
   state.filteredDays.forEach((r) => {
     const tr = document.createElement("tr");
     tr.className = "dayRow" + (r.date === state.currentTd ? " active" : "") + (state.blind ? " spoiler" : "");
-    tr.innerHTML = `<td>${state.blind ? "••••••" : r.date}</td><td>${names[r.weekday] ?? ""}</td><td>${r.ny_range_pips ?? "—"}</td><td>${r.lon_range_pips ?? "—"}</td>`;
+    tr.innerHTML = `<td data-label="Date">${state.blind ? "••••••" : r.date}</td><td data-label="Day">${names[r.weekday] ?? ""}</td><td data-label="NY rng">${r.ny_range_pips ?? "—"}</td><td data-label="Lon rng">${r.lon_range_pips ?? "—"}</td>`;
     tr.onclick = () => loadDay(r.date);
     tbody.appendChild(tr);
   });
@@ -456,10 +456,10 @@ async function refreshAccountPanel() {
     program: state.account.program,
   });
   $("#acctSummary").innerHTML = `
-    <div class="row"><span>Balance</span><b>$${s.balance.toFixed(2)}</b></div>
-    <div class="row"><span>Day P&amp;L</span><span>${s.day_pnl_pct.toFixed(2)}%</span></div>
-    <div class="row"><span>Daily DD used</span><span class="badge ${s.day_dd_status}">${s.day_dd_used_pct.toFixed(2)}% / ${s.day_dd_limit_pct}%</span></div>
-    <div class="row"><span>Max DD used</span><span class="badge ${s.max_dd_status}">${s.max_dd_used_pct.toFixed(2)}% / ${s.max_dd_limit_pct}%</span></div>
+    <div class="row"><span>Balance</span><b class="tabular">$${s.balance.toFixed(2)}</b></div>
+    <div class="row"><span>Day P&amp;L</span><span class="tabular">${s.day_pnl_pct.toFixed(2)}%</span></div>
+    <div class="row"><span>Daily DD used <button type="button" class="info-icon" data-tip="How much of today's allowed loss you've used. Resets every trading day. Hitting 100% ends today's trading on a real Maven account.">i</button></span><span class="badge ${s.day_dd_status} tabular">${s.day_dd_used_pct.toFixed(2)}% / ${s.day_dd_limit_pct}%</span></div>
+    <div class="row"><span>Max DD used <button type="button" class="info-icon" data-tip="How much of your total allowed drawdown (from the account's peak balance) you've used. Hitting 100% ends the whole account on a real Maven account.">i</button></span><span class="badge ${s.max_dd_status} tabular">${s.max_dd_used_pct.toFixed(2)}% / ${s.max_dd_limit_pct}%</span></div>
     ${s.day_dd_breached || s.max_dd_breached ? `<div class="breach"><svg viewBox="0 0 24 24"><path d="M12 3 1 21h22L12 3z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>BREACHED</div>` : ""}
   `;
 }
@@ -571,6 +571,63 @@ $("#savePreset").onclick = async () => {
   await postJSON("/api/presets", { name, from: f.from, to: f.to, lon_high: $("#fLonHigh").checked, lon_low: $("#fLonLow").checked });
   loadPresetList();
 };
+
+// ---------------------------------------------------------------- responsive: drawers + sheet
+// (DESIGN_SYSTEM.md S8: nav/account become slide-in drawers below 1440px, and on phones (<600px)
+// both fold into a single bottom sheet the user switches between with the tabs above #layout.
+// Pure UI state -- opening/closing never re-fetches or changes what data is shown.)
+const overlay = $("#overlayDim");
+function closeDrawers() {
+  $("#navigator").classList.remove("open");
+  $("#accountPanel").classList.remove("open");
+  overlay.classList.remove("on");
+}
+$("#navToggle").onclick = () => {
+  const willOpen = !$("#navigator").classList.contains("open");
+  closeDrawers();
+  if (willOpen) { $("#navigator").classList.add("open"); overlay.classList.add("on"); }
+};
+$("#acctToggle").onclick = () => {
+  const willOpen = !$("#accountPanel").classList.contains("open");
+  closeDrawers();
+  if (willOpen) { $("#accountPanel").classList.add("open"); overlay.classList.add("on"); }
+};
+overlay.onclick = closeDrawers;
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawers(); });
+
+// Phone-only bottom sheet: #navigator and #accountPanel share the same fixed-bottom slot
+// (style.css, <600px only) and this just picks which one is visible -- both keep their full,
+// un-duplicated markup and event listeners, nothing here re-implements them.
+function showSheetTab(which) {
+  $("#tabDays").classList.toggle("active", which === "days");
+  $("#tabAccount").classList.toggle("active", which === "account");
+  $("#navigator").classList.toggle("sheetActive", which === "days");
+  $("#accountPanel").classList.toggle("sheetActive", which === "account");
+}
+$("#tabDays").onclick = () => showSheetTab("days");
+$("#tabAccount").onclick = () => showSheetTab("account");
+showSheetTab("days");
+
+// Generic tap-accessible info tooltip (DESIGN_SYSTEM.md S9: "not hover-only"). One shared
+// floating element, positioned next to whichever .info-icon was tapped; event-delegated so it
+// works for icons added dynamically (e.g. refreshAccountPanel's DD-used rows) with no extra wiring.
+const tooltipEl = document.createElement("div");
+tooltipEl.className = "tooltip-pop elev-raised";
+document.body.appendChild(tooltipEl);
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".info-icon");
+  if (!btn) { tooltipEl.classList.remove("open"); return; }
+  e.stopPropagation();
+  const r = btn.getBoundingClientRect();
+  tooltipEl.textContent = btn.dataset.tip || "";
+  tooltipEl.classList.add("open");
+  const top = r.bottom + 8;
+  let left = r.left;
+  const maxLeft = window.innerWidth - 248;
+  if (left > maxLeft) left = Math.max(8, maxLeft);
+  tooltipEl.style.top = `${top}px`;
+  tooltipEl.style.left = `${left}px`;
+});
 
 // ---------------------------------------------------------------- boot
 (async function init() {

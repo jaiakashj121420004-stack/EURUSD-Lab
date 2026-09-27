@@ -20,23 +20,44 @@ is still its own separate light-only palette, restyled later — same rule each 
 ## 1. Surfaces audited
 
 **A. Replay trainer** (`nylab/replay/static/{index.html,style.css,app.js}`, served by `server.py`/`api.py`).
-**Tokens/colors restyled 2026-09-27** (stage 1 of 3 — layout/breakpoints and the remaining polish
-below are still to do): full Porcelain/Espresso token set + elevation classes (`style.css`), the
-`.light` body-class toggle replaced by the standard `data-theme` attribute + `localStorage`
-`eurusd-theme` pattern (same as surface C), `#darkToggle`'s id/onchange contract kept exactly
-(now a CSS-styled switch, not a plain checkbox visually). Chart colors were hardcoded in THREE
-places (`style.css` vars, `app.js`'s `initChart`, `app.js`'s `applyTheme`) — now read live from
-the CSS via a `cssVar()` helper everywhere (`initChart`, `applyTheme`, `sessionBoxes()`,
-`drawLevelLines`, `applySessionMarkers`, `drawPositionLines`), one source of truth. Two new
-semantic tokens (`--level-asia`, `--level-weekly`) let the 5 level-line groups (London/Asia/
-daily/weekly/session-opens) stay visually distinct while everything else reuses the core 4 hues.
-Breach is now styled (`.breach`: bear color + diagonal hatch + an inline-SVG warning icon, no
-color-alone signal, no emoji) — previously plain unstyled text. Still to do: the responsive
-breakpoints in §8 (currently still a fixed 3-column grid, no phone/tablet layout at all), and the
-remaining §9 items (info-icon tooltips, an unmistakable masked state for blind-mode/spoiler rows
-beyond the existing opacity dim). States: empty (no day loaded), loading (day list fetch), day
-loaded/no trade, pending order, open trade, trade closed, blind mode, spoiler day-table rows
-(`.spoiler`), breach (styled), dragging SL/TP line (`.dragging-line`).
+**Fully restyled 2026-09-27, all 3 stages.** Stage 1 (tokens/colors): full Porcelain/Espresso token
+set + elevation classes (`style.css`), the `.light` body-class toggle replaced by the standard
+`data-theme` attribute + `localStorage` `eurusd-theme` pattern (same as surface C), `#darkToggle`'s
+id/onchange contract kept exactly (now a CSS-styled switch, not a plain checkbox visually). Chart
+colors were hardcoded in THREE places (`style.css` vars, `app.js`'s `initChart`, `app.js`'s
+`applyTheme`) — now read live from the CSS via a `cssVar()` helper everywhere (`initChart`,
+`applyTheme`, `sessionBoxes()`, `drawLevelLines`, `applySessionMarkers`, `drawPositionLines`), one
+source of truth. Two new semantic tokens (`--level-asia`, `--level-weekly`) let the 5 level-line
+groups (London/Asia/daily/weekly/session-opens) stay visually distinct while everything else
+reuses the core 4 hues. Breach is now styled (`.breach`: bear color + diagonal hatch + an
+inline-SVG warning icon, no color-alone signal, no emoji) — previously plain unstyled text.
+
+Stage 2 (responsive, §8): >=1440px keeps the original 3-column grid; 1024-1439px drops to chart +
+account panel with the navigator becoming a slide-in drawer (`#navToggle`, `#overlayDim`);
+600-1023px drops both side panels to drawers (`#navToggle`+`#acctToggle`); <600px (phone) goes
+chart-first in a single stacked column, with `#navigator`/`#accountPanel` sharing one fixed
+bottom-sheet slot switched by a small tab bar (`#sheetTabs`/`#tabDays`/`#tabAccount` — new IDs,
+nothing existing renamed) rather than a full drag-gesture sheet (that needs real gesture JS, kept
+as an ahead-only mock in `design/preview.html` per its own §4 note, not built for the real app in
+this pass). The day table becomes cards on phone (CSS `data-label`-driven, new `data-label`
+attributes on `renderDayTable()`'s cells, no markup restructuring). All required IDs/classes in
+this section re-verified present after every stage's edits.
+
+Stage 3 (remaining §9 polish): tap-accessible info-icon tooltips (`.info-icon`, one shared
+floating `.tooltip-pop`, event-delegated so icons added dynamically by `refreshAccountPanel()`
+work with no extra wiring) added next to Risk %, the lots preview, and the daily/max drawdown
+badges. The blind-mode spoiler row's mask got a diagonal-hatch pattern added on top of its
+existing opacity dim, matching the breach treatment's "color + pattern, never color alone" rule —
+**note, NOT changed in this pass**: `renderDayTable()` only ever replaced the Date cell's text
+with `••••••` in blind mode; the NY/London range PIP VALUES were never masked, just dimmed to 45%
+(now 55%) opacity, so they're still readable underneath the new hatch. That's a data-exposure gap
+in the underlying blind-mode LOGIC (ROADMAP 6.2's job, "hide-outcome columns + spoiler icons"),
+not a styling one — DESIGN_SYSTEM.md's own preamble says this file changes visual layer only, so
+it's flagged here rather than fixed under a design commit.
+
+States: empty (no day loaded), loading (day list fetch), day loaded/no trade, pending order, open
+trade, trade closed, blind mode, spoiler day-table rows (`.spoiler`, hatched), breach (styled),
+dragging SL/TP line (`.dragging-line`), drawer open/closed, bottom-sheet tab active.
 
 **B. Research report** (`nylab/report/html.py` + `charts.py` + `sessions_section.py`). Single inline
 `<style>` block, light-only, fixed max-width 980px column, no dark mode. Charts are matplotlib PNGs
