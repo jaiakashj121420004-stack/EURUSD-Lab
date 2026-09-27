@@ -289,10 +289,11 @@ def main():
                                                    "character/day_type labels with Akash")
     lv_sub = p_lv.add_subparsers(dest="lv_command", required=True)
     p_lv_build = lv_sub.add_parser("build", help="sample days, write a self-contained HTML review page")
-    p_lv_build.add_argument("--n", type=int, default=20)
-    p_lv_build.add_argument("--seed", type=int, default=43,
-                             help="43+ for the curated strategy (round 3 onward); rounds 1-2 used seed 42 "
-                                  "with --strategy random")
+    p_lv_build.add_argument("--n", type=int, default=14)
+    p_lv_build.add_argument("--seed", type=int, default=44,
+                             help="44+ for the curated strategy round-4 revision (<15 days, \"normal\" "
+                                  "excluded); round 3 used seed 43/n=20 with the old (pre-greedy) floor, "
+                                  "rounds 1-2 used seed 42 with --strategy random")
     p_lv_build.add_argument("--strategy", choices=["curated", "random"], default="curated",
                              help="'curated' (default, ROADMAP 5.6 round 3+): near-rule-boundary fill "
                                   "beyond the stratified floor. 'random': the original round 1/2 "

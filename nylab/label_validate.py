@@ -186,28 +186,131 @@ def _day_ambiguity_score(row: pd.Series) -> float:
     return min(scores) if scores else float("nan")
 
 
-def sample_days_curated(days: pd.DataFrame, n: int = 20, seed: int = 43,
+def _stratified_floor_greedy(days: pd.DataFrame, seed: int,
+                              min_per_label: int = MIN_PER_LABEL,
+                              exclude_labels: tuple = ("normal",)) -> set:
+    """Greedy set-cover floor, used only by sample_days_curated() (round-4 revision, Akash
+    2026-09-27: "I want less than 15 days and think normal should be removed").
+
+    The original `_stratified_floor()` above (still used unchanged by `sample_days()`) picks
+    each (session, label) requirement's day INDEPENDENTLY -- one shuffled pool per requirement,
+    first `min_per_label` picked. Simple and reproducible, but wasteful: a single real trading
+    day usually satisfies several requirements at once (e.g. one day can be asia=chop AND
+    lon=reversal AND nyam_kz=trend simultaneously), and picking each requirement's day
+    independently ignores that overlap entirely. Measured on the real 5-year cache
+    (2026-09-27): independent-per-requirement picking needs 34 distinct days to floor every
+    occurring (session, character-label) combo (28 once "normal" is excluded, see below); a
+    greedy set-cover -- repeatedly pick whichever remaining candidate day satisfies the most
+    still-uncovered requirements -- needs only 7 for the same 28, the SAME guarantee (every
+    occurring non-"normal" label still gets >=1 floored day) for a fifth of the days. This is
+    what actually gets a round under a <15-day budget without weakening the "no label silently
+    skipped" property the floor exists for (see `_stratified_floor`'s own docstring history).
+
+    `exclude_labels` (default: just `"normal"`): Akash, 2026-09-27 -- "normal" is the
+    session-character rule's own catch-all, not a defined shape ("normal is not well defined
+    imo"), so it is dropped from the floor requirement entirely AND never rendered as a
+    reviewable row in the generated page (see `render_html`'s JS: `drawDay` filters it out) --
+    he is not asked to judge "is this normal" any more, only the five well-defined character
+    labels (quiet/reversal/trend/range_both/chop) and five well-defined day types
+    (inside/outside/reversal/trend/range_day). `day_type`'s own catch-all, "normal_day", gets
+    the same treatment in the render step, but has no floor requirement to exclude it from here
+    -- day_type was never floored (only session `character` is; day_type only ever entered a
+    round via the curated fill's ambiguity ranking or by riding along on a floored day).
+
+    Greedy set-cover is NP-hard to solve exactly in general; this uses the standard greedy
+    approximation (repeatedly take the highest-coverage remaining candidate), which is
+    provably within a ln(n) factor of optimal and, on this real data, empirically matches the
+    true minimum of 7 (verified in tests/test_label_validate.py by confirming no smaller cover
+    exists via brute-force search over small subsets). Ties in coverage count are broken by
+    reshuffling the candidate day order (seeded) before each pick, so the result is
+    reproducible for a given `seed`, not an artifact of `days.index`'s insertion order.
+
+    `min_per_label` > 1 is asserted against below: greedy set-cover in this simple form only
+    solves "cover every requirement at least once", not "at least min_per_label times" (a
+    harder variant nothing currently needs, since MIN_PER_LABEL has been 1 since this module's
+    first version) -- better to fail loudly than silently do the wrong thing if that ever
+    changes."""
+    assert min_per_label == 1, "greedy set-cover floor only supports min_per_label=1"
+    rng = random.Random(seed)
+    reqs: dict = {}
+    for sid in SESSIONS_TO_VALIDATE:
+        col = f"{_PREFIX[sid]}_character"
+        if col not in days.columns:
+            continue
+        for label, sub in days.groupby(col):
+            if pd.isna(label) or label in exclude_labels:
+                continue
+            reqs[(sid, label)] = set(sub.index)
+
+    day_to_reqs: dict = {}
+    for req, dayset in reqs.items():
+        for d in dayset:
+            day_to_reqs.setdefault(d, set()).add(req)
+
+    remaining = set(reqs.keys())
+    chosen: set = set()
+    candidates = list(day_to_reqs.keys())
+    while remaining:
+        rng.shuffle(candidates)  # seeded tie-break, reshuffled before every pick
+        best_day, best_cov = None, -1
+        for d in candidates:
+            cov = len(day_to_reqs[d] & remaining)
+            if cov > best_cov:
+                best_day, best_cov = d, cov
+        if best_day is None or best_cov <= 0:
+            break  # shouldn't happen: every remaining requirement has >=1 satisfying day
+        chosen.add(best_day)
+        remaining -= day_to_reqs[best_day]
+    return chosen
+
+
+def _day_has_reviewable_row(row: pd.Series) -> bool:
+    """True iff at least one of this day's validated-session characters, or its day_type, is a
+    well-defined (non-"normal"/"normal_day") label. Since the rendered page now hides
+    "normal"/"normal_day" rows entirely (Akash, 2026-09-27: "normal should be removed"), a
+    curated-fill candidate that is "normal" or "normal_day" EVERYWHERE would render with zero
+    visible rows -- a wasted slot in an already-tight <15-day budget. Used only to filter
+    `sample_days_curated`'s fill candidates; floored days always pass this trivially (they were
+    floored precisely because they carry a non-"normal" label for some session)."""
+    for sid in SESSIONS_TO_VALIDATE:
+        col = f"{_PREFIX[sid]}_character"
+        val = row.get(col)
+        if not pd.isna(val) and val != "normal":
+            return True
+    dt = row.get("day_type")
+    return not (pd.isna(dt) or dt == "normal_day")
+
+
+def sample_days_curated(days: pd.DataFrame, n: int = 14, seed: int = 44,
                          min_per_label: int = MIN_PER_LABEL) -> list[pd.Timestamp]:
-    """Stratified-floor-then-near-threshold. Same floor guarantee as `sample_days()` (a rare
-    label is its own boundary case -- it doesn't need to be "near a threshold" in the usual
-    sense to earn a place, since it barely has any other members to compare against at all --
-    so the floor step is reused verbatim, not replaced). The FILL beyond the floor is where
-    this differs from `sample_days()`: instead of uniform-random days, remaining candidates are
-    ranked by `_day_ambiguity_score` (smallest distance to any rule boundary = picked first) and
-    the most boundary-adjacent ones are added until `n` is reached. Selection runs over the
-    FULL cached day table every time (never restricted to a previous review round or to days
-    Akash has already flagged -- that would be a form of look-ahead into which round produced
-    disagreements, RESEARCH_PROTOCOL.md's spirit if not its letter).
+    """Stratified-floor-then-near-threshold, round-4 revision (Akash, 2026-09-27: "less than 15
+    days" + "normal should be removed"). Floor uses `_stratified_floor_greedy` (set-cover, 7
+    days on the real cache, excluding "normal") rather than `sample_days()`'s independent-
+    per-requirement `_stratified_floor` (34, or 28 excluding "normal") -- same guarantee, far
+    fewer days; see `_stratified_floor_greedy`'s own docstring for the full reasoning. The FILL
+    beyond the floor ranks remaining candidates by `_day_ambiguity_score` (smallest distance to
+    any rule boundary = picked first) -- the genuinely ambiguous, informative edge cases --
+    but only among candidates `_day_has_reviewable_row` says would actually show at least one
+    non-"normal"/"normal_day" row once rendered (a day that's "normal" everywhere would be a
+    wasted slot now that those rows are hidden). Selection runs over the FULL cached day table
+    every time (never restricted to a previous review round or to days Akash has already
+    flagged -- that would be a form of look-ahead into which round produced disagreements,
+    RESEARCH_PROTOCOL.md's spirit if not its letter).
 
     Ties (multiple days at the same distance, common with rounded cached values) are broken by
     a seed-shuffle before the stable sort, so the result is reproducible for a given `seed` but
     not an artifact of `days.index` insertion order. Like `sample_days()`, the floor is never
-    trimmed back down, so the result can be a few days more than `n`.
+    trimmed back down, so the result can be a few days more than `n` -- on the real cache this
+    is moot (floor=7 is well under n=14), but it's still possible on a smaller/different cache
+    (e.g. a shorter backtest window with fewer occurrences per label), so the guarantee is kept
+    rather than silently dropped for the common case.
     """
-    chosen, rng = _stratified_floor(days, seed, min_per_label=min_per_label)
+    chosen = _stratified_floor_greedy(days, seed, min_per_label=min_per_label)
+    rng = random.Random(seed)  # fresh instance for the fill tie-break; floor no longer threads one
     if len(chosen) >= n:
         return sorted(chosen)
-    remaining = [td for td in days.index if td not in chosen]
+    remaining = [td for td in days.index
+                 if td not in chosen and _day_has_reviewable_row(days.loc[td])]
     scored = []
     for td in remaining:
         score = _day_ambiguity_score(days.loc[td])
@@ -372,9 +475,11 @@ details table{margin-top:10px}
 <div class="muted">ROADMAP 5.6 -- for each label below: does it look right on the chart? Use the zoom buttons to
 look closely at one session at a time, click Agree or Disagree for every row, then use "Download my answers"
 at the bottom and send that file back. %%COUNT%% days, curated near a rule boundary so each one is an
-informative call, not an obvious one. Hover any bold label for a plain-English definition, or open
-"What do these labels mean?" below for the full list. Dashed lines on the full-day chart mark yesterday's
-high (PDH) and low (PDL) for day_type calls.</div></div>
+informative call, not an obvious one. "normal"/"normal_day" (the rules' own catch-all, not a defined
+shape) are never shown here -- only the five well-defined character labels and five well-defined day
+types. Hover any bold label for a plain-English definition, or open "What do these labels mean?" below
+for the full list. Dashed lines on the full-day chart mark yesterday's high (PDH) and low (PDL) for
+day_type calls.</div></div>
 <button id="themeBtn" aria-label="Toggle theme"><svg id="themeIcon" viewBox="0 0 24 24"></svg></button>
 </header>
 
@@ -395,7 +500,7 @@ extreme (top or bottom quarter of its range) -- little back-and-forth, real net 
 back near the middle -- swept liquidity on both sides and went nowhere net.</td></tr>
 <tr><td><b>chop</b></td><td>Lots of back-and-forth price movement with very little net progress
 (inefficient -- the close ended up close to where it started, even though price moved a lot).</td></tr>
-<tr><td><b>normal</b></td><td>None of the above -- an ordinary session, no strong bias either way.</td></tr>
+<tr><td><b>normal</b></td><td>None of the above -- an ordinary session, no strong bias either way. <i>(Not shown for review below -- this is the rules' own catch-all, not a defined shape.)</i></td></tr>
 </table>
 <p class="muted" style="margin-top:14px">day_type applies the same idea to the WHOLE trading day, using
 YESTERDAY's high/low as the reference level instead of the previous session's. Priority: inside_day beats
@@ -412,7 +517,7 @@ other side -- same stop-run shape as the session-level "reversal", for the whole
 range) -- a directional day.</td></tr>
 <tr><td><b>range_day</b></td><td>Today took out BOTH yesterday's high and low, but closed back near
 the middle.</td></tr>
-<tr><td><b>normal_day</b></td><td>None of the above -- an ordinary day.</td></tr>
+<tr><td><b>normal_day</b></td><td>None of the above -- an ordinary day. <i>(Not shown for review below, same reason as "normal".)</i></td></tr>
 </table>
 </details>
 
@@ -510,9 +615,22 @@ function drawDay(day, idx){
 
   const tbl = document.createElement("table");
   tbl.innerHTML = "<tr><th>Label</th><th>Computed value</th><th>Your call</th><th>Note (optional)</th></tr>";
-  const rows = day.sessions.map(s => ["session:" + s.id, s.label,
-    {range_rel: s.range_rel, er: s.er, close_loc: s.close_loc}]);
-  rows.push(["day_type", day.day_type, {range_rel: null, er: null, close_loc: day.day_close_loc}]);
+  // "normal"/"normal_day" rows are never shown for review (Akash, 2026-09-27: "normal should
+  // be removed" -- it's the rule's own catch-all, not a defined shape). sample_days_curated()
+  // already avoids picking days that would end up with zero reviewable rows this way, but the
+  // filter lives here too (not only in the sampler) so a page built with --strategy random
+  // (rounds 1-2 reproduction) also never asks Akash to judge "normal".
+  const rows = day.sessions
+    .map(s => ["session:" + s.id, s.label, {range_rel: s.range_rel, er: s.er, close_loc: s.close_loc}])
+    .filter(([, val]) => val && val !== "normal");
+  if (day.day_type && day.day_type !== "normal_day") {
+    rows.push(["day_type", day.day_type, {range_rel: null, er: null, close_loc: day.day_close_loc}]);
+  }
+  if (!rows.length) {
+    const p = document.createElement("p"); p.className = "muted";
+    p.textContent = "Every label on this day was \"normal\"/\"normal_day\" -- nothing to review here.";
+    wrap.appendChild(p);
+  }
   rows.forEach(([key, val, featVals]) => {
     const tr = document.createElement("tr");
     const ansKey = day.td + "|" + key;
@@ -645,7 +763,14 @@ function setAns(key, val){
 }
 function setNote(key, val){ answers[key] = Object.assign(answers[key] || {}, {note: val}); }
 function updateProgress(){
-  const total = DATA.days.reduce((n, d) => n + d.sessions.length + 1, 0);
+  // Matches drawDay's row filter exactly: only non-"normal"/"normal_day" labels are ever
+  // rendered as reviewable rows, so the denominator must count only those, not every
+  // session + day_type slot -- otherwise the progress bar would forever show "X / (too many)".
+  const total = DATA.days.reduce((n, d) => {
+    const sessCount = d.sessions.filter(s => s.label && s.label !== "normal").length;
+    const dtCount = (d.day_type && d.day_type !== "normal_day") ? 1 : 0;
+    return n + sessCount + dtCount;
+  }, 0);
   const answered = Object.values(answers).filter(a => a.call).length;
   document.getElementById("progress").textContent = answered + " / " + total + " answered";
 }
@@ -699,7 +824,7 @@ def score(answers: dict, payload: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build(cache_dir: str, sessions_cfg: dict, n: int = 20, seed: int = 43, strategy: str = "curated"):
+def build(cache_dir: str, sessions_cfg: dict, n: int = 14, seed: int = 44, strategy: str = "curated"):
     from nylab import cache as cache_mod
     bars, days = cache_mod.load(cache_dir)
     missing = [f"{_PREFIX[sid]}_character" for sid in SESSIONS_TO_VALIDATE
