@@ -3,7 +3,7 @@
 Read this first in any new session. Update it after every ticket. See CLAUDE.md and
 docs/ROADMAP.md for the full plan (checkboxes there are kept current too).
 
-## Status: Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR). Ready for Phase 5.
+## Status: Phase 5.7 (statistics integrity) in progress -- 5.7.1 done (prior-only DSL thresholds), 5.7.2-5.7.6 queued. Phase 4 (economic calendar) done and confirmed on Akash's real MT5 calendar export (34,075 events, 2021-09-26 -> 2026-09-25, 18,454 USD / 15,621 EUR).
 
 Akash has not yet run the replay trainer himself (no MT5 export/import done yet either) -- his
 call: keep building through the phases on the automated tests alone, and he'll sit down and look
@@ -858,3 +858,57 @@ access to (only the cached `days` table's aggregated columns). Distances are raw
 so this doesn't let one feature dominate in practice, and it's easier to sanity-check by eye).
 PDH/PDL reference lines only render on the full-day zoom, not per-session zooms. Not started this
 round: ROADMAP 5.7 (statistics integrity) and Akash actually scoring round 3 once he's reviewed it.
+
+## 2026-09-27 — Phase 5.7.1: prior-only DSL thresholds (statistics integrity, part 1 of 6)
+
+Akash chose two priorities: Phase 5.7 (statistics integrity) and restyling the two remaining
+surfaces (replay trainer, research report) to the approved design system. Doing 5.7 first (it's
+correctness-critical, already approved, and per Akash's own design-doc rule the restyle must
+never share a commit with 5.7 work anyway) -- restyle work has not started.
+
+**5.7.1 done.** `nylab/hyp_dsl.py` adds `quantile_prior(col, q, n=60)` and `median_prior(col,
+n=60)` -- both implemented as `col.shift(1).rolling(n, min_periods=n)`, so row t's value only
+ever sees rows t-n .. t-1, never t itself or anything after it. Plain `quantile()`/`median()`
+stay in the DSL unchanged (still legitimate in `outcome`/`baseline` -- a fixed yardstick to
+measure a result against isn't a look-ahead leak, only a *decision* built on one is).
+
+`nylab/hyp_loader.py::_check_prior_only()` is the enforcement: walks a hypothesis's parsed
+`condition` tree and rejects it if it calls plain `quantile`/`median` there, with an error
+message naming which `_prior` function to use instead. Only `condition` is checked, matching
+the existing look-ahead check's own scope.
+
+**H014 bumped to v1.1** (`config/hypotheses/H014.yaml`) -- it's the actual hypothesis this bug
+was found in on 2026-09-26 (RESEARCH_PROTOCOL.md S3: full-sample `quantile(asia_range, 0.2)`
+flagged 47% of 2024's days as calm but only 3% of 2022's -- it had learned which YEARS were
+calm, not which days). v1.1's condition is `asia_range < quantile_prior(asia_range, 0.2)`
+(default n=60). `research/ledger.csv`'s existing v1.0 rows are untouched (ledger is append-only;
+this is a new (id, version) pair, m += 1, not a rewrite of history). v1.1's `outcome` still uses
+the overlapping `ny_range` window (07:00-16:00 for a decision_time_h=0 hypothesis) -- fixing
+that is 5.7.2/5.7.4's job (the clean `r0930_1600`-style columns), deliberately not bundled into
+this narrower condition-only fix. H013 needed no DSL change here (its condition is a plain
+threshold, `adr_used_0930 > 0.8` -- no `quantile()`/`median()` call at all); its own problem is
+the outcome-window overlap, also deferred to 5.7.2/5.7.4.
+
+**Expected and accepted test-suite consequence:** `test_hypotheses_csv_matches_golden`
+(`tests/test_nylab_phase1.py`) checks that every v0-ported hypothesis's `n`/`hit`/etc. still
+match v0's golden CSV exactly -- H014 v1.1 now legitimately flags a different (smaller, later
+in the sample, since the first 60 days have no prior window yet) set of days than v0's
+full-sample condition did, so this is BY DESIGN, not a regression. Updated that test to exclude
+H014's row from the strict parity check (with a comment explaining why) rather than loosen the
+check for everyone else.
+
+**Verified:** 34/34 in `tests/test_hyp_dsl.py` + `tests/test_hyp_loader.py` (10 new tests: 2 for
+`quantile_prior`/`median_prior`'s rolling-window semantics, 5 for the loader's new rejection +
+acceptance + the real H014.yaml file actually loading as v1.1), 3/3 `tests/test_hyp_engine_at.py`
+(AT-01/AT-02 unaffected), full suite 149/149.
+
+**Not done yet (queued, in ROADMAP order):** 5.7.2 (`starts_at_h` per column + loader rejects an
+`outcome` starting before `decision_time_h` + new `r0930_1600`/`r0930_1600_rel` columns) --
+`starts_at_h` for every `COLUMN_DOCS` entry has been hand-derived from `nylab/days.py`'s actual
+window-open hours (not guessed) but not yet written into code; 5.7.3 (engine: IS-only p,
+two-proportion test vs complement, true Wilson CI -- `nylab/stats.py::wilson_ci()` is currently
+a mislabeled Wald interval, not real Wilson -- 5-td embargo, `direction` field, effect in pips);
+5.7.4 (re-issue H013/H014 as v1.1 in full -- post-09:30 outcomes, correctly-directed titles,
+re-label H015 descriptive); 5.7.5 (new `negative` verdict word); 5.7.6 (AT-05 artifact-catching
+fixtures). Design restyle of the replay trainer and research report also still pending, to start
+only after 5.7 is fully done, in its own separate commit stream.

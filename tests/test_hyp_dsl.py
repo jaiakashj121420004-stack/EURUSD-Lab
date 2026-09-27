@@ -41,6 +41,27 @@ def test_quantile_and_median_functions():
     assert lo == 1.0
 
 
+def test_quantile_prior_uses_only_rows_t_minus_n_through_t_minus_1():
+    """ROADMAP 5.7.1: row t's value must come from a window ending at t-1 -- never row t itself,
+    and never a row after t (the whole point vs. plain quantile())."""
+    x = pd.Series(range(1, 11), dtype=float)  # 1..10
+    ns = {"x": x}
+    out = evaluate("quantile_prior(x, 0.0, 3)", ns)  # min over the prior 3 rows
+    assert pd.isna(out.iloc[:3]).all()  # not enough prior history yet
+    # row 3 (0-indexed): prior 3 rows are x[0..2] = 1,2,3 -> min = 1
+    assert out.iloc[3] == 1.0
+    # row 9: prior 3 rows are x[6..8] = 7,8,9 -> min = 7 (row 9's own value, 10, must be excluded)
+    assert out.iloc[9] == 7.0
+
+
+def test_median_prior_defaults_to_a_60_row_window():
+    x = pd.Series(range(120), dtype=float)
+    out = evaluate("median_prior(x)", {"x": x})
+    assert pd.isna(out.iloc[:60]).all()
+    # row 60: prior 60 rows are x[0..59] -> median 29.5
+    assert out.iloc[60] == 29.5
+
+
 @pytest.mark.parametrize("bad_expr", [
     "__import__('os').system('echo hi')",
     "os.system('echo hi')",

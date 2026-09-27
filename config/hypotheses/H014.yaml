@@ -1,9 +1,18 @@
 id: H014
-version: '1.0'
+version: '1.1'
 title: Asia range in bottom 20% -> NY range above its median
 decision_time_h: 0
-condition: asia_range < quantile(asia_range, 0.2)
+condition: asia_range < quantile_prior(asia_range, 0.2)
 outcome: ny_range > median(ny_range)
 baseline: ny_range > median(ny_range)
-notes: Ported verbatim from v0/nylab.hypotheses H014. decision_time_h=0 -- asia_range
-  is fully known right at the day's midnight-NY mark.
+notes: >-
+  v1.0 (ported verbatim from v0/nylab.hypotheses H014) used the full-sample quantile(),
+  which the 2026-09-26 review found was picking calm YEARS rather than calm days -- flagged
+  47% of 2024's days but 3% of 2022's (RESEARCH_PROTOCOL.md S3, ROADMAP 5.7.1). v1.1 swaps in
+  quantile_prior() (rolling 60-prior-day window) so the threshold only ever uses data a trader
+  actually had on the decision day. v1.0's ledger rows (research/ledger.csv) are untouched --
+  this is a NEW (id, version) pair, m += 1, not a rewrite of history. Still pending (ROADMAP
+  5.7.2/5.7.4) -- the outcome `ny_range` itself spans 07:00-16:00 even though decision_time_h=0,
+  so this v1.1 does not yet fix the separate outcome-window-overlap issue -- that needs the
+  clean post-decision `r0930_1600`-style columns 5.7.2 adds, and is deferred to the full v1.1
+  outcome re-issue (5.7.4) rather than bundled into this narrower 5.7.1 condition fix.

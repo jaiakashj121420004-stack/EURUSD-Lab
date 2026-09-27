@@ -161,3 +161,73 @@ def test_unsafe_expression_is_rejected_at_load_time(tmp_path):
 def test_load_all_on_empty_directory_raises(tmp_path):
     with pytest.raises(HypothesisLoadError, match="no hypothesis"):
         load_all(str(tmp_path))
+
+
+def test_condition_calling_full_sample_quantile_is_rejected(tmp_path):
+    """ROADMAP 5.7.1: exactly the bug verified in H014 on 2026-09-26 -- a condition's threshold
+    must come from prior days only, not the whole (past+future) cached history."""
+    path = _write(tmp_path, "bad_quantile.yaml", """
+        id: HBADQ
+        version: "1.0"
+        title: "full-sample threshold in condition"
+        decision_time_h: 0
+        condition: "asia_range < quantile(asia_range, 0.2)"
+        outcome: "ny_range > median(ny_range)"
+        baseline: "ny_range > median(ny_range)"
+    """)
+    with pytest.raises(HypothesisLoadError, match="quantile_prior"):
+        load_one(path)
+
+
+def test_condition_calling_full_sample_median_is_rejected(tmp_path):
+    path = _write(tmp_path, "bad_median.yaml", """
+        id: HBADM
+        version: "1.0"
+        title: "full-sample threshold in condition"
+        decision_time_h: 9.5
+        condition: "adr_used_0930 > median(adr_used_0930)"
+        outcome: "ny_drive > 0"
+        baseline: "ny_drive > 0"
+    """)
+    with pytest.raises(HypothesisLoadError, match="median_prior"):
+        load_one(path)
+
+
+def test_condition_calling_quantile_prior_is_accepted(tmp_path):
+    path = _write(tmp_path, "good_prior.yaml", """
+        id: HGOODPRIOR
+        version: "1.0"
+        title: "prior-only threshold in condition"
+        decision_time_h: 0
+        condition: "asia_range < quantile_prior(asia_range, 0.2, 60)"
+        outcome: "ny_range > median(ny_range)"
+        baseline: "ny_range > median(ny_range)"
+    """)
+    hyp = load_one(path)
+    assert hyp.id == "HGOODPRIOR"
+
+
+def test_outcome_and_baseline_may_still_use_full_sample_quantile_and_median(tmp_path):
+    """The ban is on `condition` only -- `outcome`/`baseline` describe the measured result
+    against a fixed yardstick, which is not a look-ahead leak."""
+    path = _write(tmp_path, "outcome_full_sample.yaml", """
+        id: HOUTFS
+        version: "1.0"
+        title: "full-sample median is fine in outcome/baseline"
+        decision_time_h: 9.5
+        condition: "pre_takes_lon_high"
+        outcome: "ny_range > median(ny_range)"
+        baseline: "ny_range > median(ny_range)"
+    """)
+    hyp = load_one(path)
+    assert hyp.id == "HOUTFS"
+
+
+def test_h014_v1_1_loads_with_a_prior_only_condition():
+    """H014 was the real hypothesis this bug was found in (2026-09-26) -- confirms the actual
+    config/hypotheses/H014.yaml file on disk was fixed to v1.1, not just covered by a synthetic
+    test fixture."""
+    hyps = load_all("config/hypotheses")
+    h014 = next(h for h in hyps if h.id == "H014")
+    assert h014.version == "1.1"
+    assert h014.condition == "asia_range < quantile_prior(asia_range, 0.2)"

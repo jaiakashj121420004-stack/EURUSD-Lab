@@ -75,7 +75,15 @@ def test_hypotheses_csv_matches_golden(nylab_run):
     v0 exactly, since those come from the SAME 15 conditions evaluated on the SAME data).
     ROADMAP 5.4 added a 16th hypothesis, H016 (a matrix-family promotion, not one v0 ever
     had) -- config/hypotheses/*.yaml loads in sorted glob order, so it sorts AFTER H001-H015
-    and doesn't disturb their alignment with the v0 golden file, which only ever had 15 rows."""
+    and doesn't disturb their alignment with the v0 golden file, which only ever had 15 rows.
+
+    ROADMAP 5.7.1 (2026-09-27): H014 is EXPECTED to diverge from the v0 golden numbers now --
+    it was bumped to v1.1 with a prior-only `quantile_prior()` condition (v0's plain
+    full-sample `quantile()` was found to leak the future, RESEARCH_PROTOCOL.md S3), which by
+    design flags a different, smaller set of days than v0's condition did. H014 (row index 13,
+    the 14th of the 15 ported hypotheses) is excluded from the strict parity check for that
+    reason; every other v0-ported hypothesis (unchanged condition/outcome) must still match
+    exactly."""
     gold = pd.read_csv(GOLDEN / "hypotheses.csv")
     new = pd.read_csv(nylab_run / "hypotheses.csv")
     assert len(gold) == 15
@@ -83,9 +91,11 @@ def test_hypotheses_csv_matches_golden(nylab_run):
     assert list(new["id"])[:15] == [f"H{i:03d}" for i in range(1, 16)]
     assert new["id"].iloc[15] == "H016"
     ported = new.iloc[:15]
+    h014_row = ported.index[ported["id"] == "H014"][0]
     for col in ("n", "hit", "baseline", "is_hit", "oos_hit", "oos_n"):
         diff = (gold[col].astype(float) - ported[col].astype(float)).abs()
         ok = (diff <= 1e-9) | (gold[col].isna() & ported[col].isna())
+        ok.loc[h014_row] = True  # H014 v1.1's prior-only condition intentionally changes n/hit
         assert ok.all(), f"{col} diverged from v0 golden at row(s) {list(diff[~ok].index)}"
 
 

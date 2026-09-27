@@ -11,6 +11,17 @@ Dotted convenience syntax ("day.x", "lon.x", "<session>.x") is supported by a te
 rewrite BEFORE parsing: `name.attr` -> `name_attr`, which is exactly the day-table's own column
 naming convention (lon_high, asia_range, ...). Plain flat column names (as used throughout
 ARCHITECTURE.md's own example, e.g. "pre_takes_lon_high") pass through untouched.
+
+ROADMAP 5.7.1: `quantile(col, q)` and `median(col)` compute over the WHOLE cached series --
+past AND future days included. That is fine in `outcome`/`baseline` (they describe the result
+being measured, a fixed yardstick), but inside `condition` it silently leaks the future into a
+same-day decision: verified 2026-09-26 (RESEARCH_PROTOCOL.md S3), H014's full-sample 20th
+percentile flagged 47% of 2024's days as "calm" but only 3% of 2022's -- it had learned which
+YEARS were calm, using data no trader has on the decision day, not which DAYS were calm.
+`quantile_prior(col, q, n=60)` and `median_prior(col, n=60)` are the fix: the value at row t
+uses only rows t-n .. t-1 (a rolling window, shifted so today is never included), same as a
+trader who can only look backward. nylab.hyp_loader enforces that `condition` may only use the
+`_prior` variants -- see its `_check_prior_only()`.
 """
 from __future__ import annotations
 
@@ -28,7 +39,8 @@ _CMP_OPS = {
     ast.Gt: operator.gt, ast.GtE: operator.ge,
 }
 _BIN_OPS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}
-_ALLOWED_FUNCS = ("abs", "quantile", "median")
+_ALLOWED_FUNCS = ("abs", "quantile", "median", "quantile_prior", "median_prior")
+_PRIOR_DEFAULT_N = 60  # ROADMAP 5.7.1's own spec: quantile_prior(col, q, n=60), median_prior(col, n=60)
 
 # Every AST node type this DSL is willing to walk. Anything else (Attribute, Subscript,
 # Lambda, comprehensions, Call with a non-whitelisted func, ...) is rejected at validate()
@@ -125,6 +137,15 @@ def _eval(node, ns: dict):
             return args[0].quantile(args[1])
         if fname == "median":
             return args[0].median()
+        if fname == "quantile_prior":
+            col, q = args[0], args[1]
+            n = int(args[2]) if len(args) > 2 else _PRIOR_DEFAULT_N
+            # shift(1) first so the window ending "today" is rows t-n .. t-1, never row t itself.
+            return col.shift(1).rolling(n, min_periods=n).quantile(q)
+        if fname == "median_prior":
+            col = args[0]
+            n = int(args[1]) if len(args) > 1 else _PRIOR_DEFAULT_N
+            return col.shift(1).rolling(n, min_periods=n).median()
         raise DSLError(f"unsupported function: {fname}")
     raise DSLError(f"disallowed expression element: {type(node).__name__}")
 

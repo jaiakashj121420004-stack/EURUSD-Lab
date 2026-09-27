@@ -8,9 +8,16 @@ loudly the moment it's loaded, before it can ever produce a number.
 Only `condition` is checked against decision_time_h. `outcome` and `baseline` describe the
 FUTURE result being tested (e.g. `ny_drive` at available_at_h=16 for a decision_time_h=9.5
 hypothesis) -- that's the whole point of a hypothesis, not a leak.
+
+ROADMAP 5.7.1: a SECOND, separate check also happens here -- `condition` may not call the
+full-sample `quantile()`/`median()` DSL functions (verified 2026-09-26 to leak the future the
+same way a too-late column does, see nylab.hyp_dsl's module docstring). Only the `_prior`
+variants (`quantile_prior`, `median_prior`) are allowed in `condition`; `outcome`/`baseline` are
+unrestricted, same as the look-ahead check above.
 """
 from __future__ import annotations
 
+import ast
 import dataclasses
 import glob
 import os
@@ -69,6 +76,26 @@ def _check_lookahead(hyp_id: str, condition: str, decision_time_h: float) -> Non
             )
 
 
+_FULL_SAMPLE_FUNCS = ("quantile", "median")  # banned in `condition`; fine in `outcome`/`baseline`
+
+
+def _check_prior_only(hyp_id: str, condition: str) -> None:
+    """ROADMAP 5.7.1: `quantile()`/`median()` compute over the WHOLE cached history (past and
+    future days alike), so a condition that calls them picks its threshold using data no trader
+    has on the decision day -- the exact bug verified in H014 on 2026-09-26 (see nylab.hyp_dsl's
+    module docstring for the numbers). `quantile_prior`/`median_prior` (a rolling prior-n-day
+    window) are the fix and remain allowed."""
+    tree = hyp_dsl.parse(condition)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _FULL_SAMPLE_FUNCS:
+            raise HypothesisLoadError(
+                f"{hyp_id}: condition {condition!r} calls {node.func.id}() -- this threshold is "
+                f"computed from the WHOLE cached history, including days after the decision day, "
+                f"which leaks the future. Use {node.func.id}_prior(...) instead (a rolling window "
+                f"of PRIOR days only); {node.func.id}() is still fine in 'outcome'/'baseline'."
+            )
+
+
 def load_one(path: str) -> Hypothesis:
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
@@ -103,6 +130,7 @@ def load_one(path: str) -> Hypothesis:
     hyp_dsl.validate(hyp_dsl.parse(hyp.outcome))
     if hyp.baseline is not None:
         hyp_dsl.validate(hyp_dsl.parse(hyp.baseline))
+    _check_prior_only(hyp.id, hyp.condition)
     _check_lookahead(hyp.id, hyp.condition, hyp.decision_time_h)
     return hyp
 

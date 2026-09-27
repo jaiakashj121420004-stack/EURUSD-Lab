@@ -136,9 +136,15 @@ Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.
 Why: a review on 2026-09-26 re-ran H013/H014 on real data and found both of the lab's only
 "significant" results were measurement artifacts (details: RESEARCH_PROTOCOL §3, PROGRESS 2026-09-26).
 The machinery must make these mistakes impossible, not just fixed once.
-- [ ] 5.7.1 DSL: prior-only threshold functions, e.g. `quantile_prior(col, q, n=60)` and
+- [x] 5.7.1 DSL: prior-only threshold functions, e.g. `quantile_prior(col, q, n=60)` and
       `median_prior(col, n=60)` (value for day t uses days t−n … t−1 only). Loader rejects plain
-      `quantile()`/`median()` inside `condition` (allowed in `outcome`/`baseline`).
+      `quantile()`/`median()` inside `condition` (allowed in `outcome`/`baseline`). Done
+      2026-09-27: `nylab/hyp_dsl.py` adds both `_prior` functions (rolling `shift(1).rolling(n,
+      min_periods=n)`); `nylab/hyp_loader.py::_check_prior_only()` rejects plain `quantile()`/
+      `median()` specifically inside `condition`. H014 (the hypothesis this bug was actually
+      found in) bumped to v1.1 with `quantile_prior(asia_range, 0.2)` in its condition -- its
+      v1.0 ledger rows are untouched (append-only). H014 v1.1's `outcome` still uses the
+      overlapping `ny_range` window; that's 5.7.2/5.7.4's job, not bundled in here.
 - [ ] 5.7.2 `COLUMN_DOCS` gains `starts_at_h`; loader rejects an `outcome` with
       `starts_at_h < decision_time_h`. Add clean post-decision outcome columns, e.g. `r0930_1600`
       (09:30–16:00 range, pips) and its `_rel` version vs prior-20-day median.
