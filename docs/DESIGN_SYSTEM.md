@@ -47,13 +47,16 @@ Stage 3 (remaining §9 polish): tap-accessible info-icon tooltips (`.info-icon`,
 floating `.tooltip-pop`, event-delegated so icons added dynamically by `refreshAccountPanel()`
 work with no extra wiring) added next to Risk %, the lots preview, and the daily/max drawdown
 badges. The blind-mode spoiler row's mask got a diagonal-hatch pattern added on top of its
-existing opacity dim, matching the breach treatment's "color + pattern, never color alone" rule —
-**note, NOT changed in this pass**: `renderDayTable()` only ever replaced the Date cell's text
-with `••••••` in blind mode; the NY/London range PIP VALUES were never masked, just dimmed to 45%
-(now 55%) opacity, so they're still readable underneath the new hatch. That's a data-exposure gap
-in the underlying blind-mode LOGIC (ROADMAP 6.2's job, "hide-outcome columns + spoiler icons"),
-not a styling one — DESIGN_SYSTEM.md's own preamble says this file changes visual layer only, so
-it's flagged here rather than fixed under a design commit.
+existing opacity dim, matching the breach treatment's "color + pattern, never color alone" rule.
+
+**Fixed separately, same day (2026-09-27), NOT in a design-system commit**: `renderDayTable()`
+used to only replace the Date cell's text with `••••••` in blind mode; the NY/London range
+PIP VALUES were never masked, just dimmed, so they were still readable underneath the hatch. That
+was a data-exposure gap in the blind-mode LOGIC, not styling, so per the no-mixing rule it was
+fixed in its own standalone commit (a narrow slice of ROADMAP 6.2, "hide-outcome columns"; the
+rest of 6.2 -- spoiler icons beyond this table, filters/presets in 6.1/6.3 -- is still open).
+`renderDayTable()` now masks all three of Date/NY rng/Lon rng behind the same `••••••` when
+blind mode is on.
 
 States: empty (no day loaded), loading (day list fetch), day loaded/no trade, pending order, open
 trade, trade closed, blind mode, spoiler day-table rows (`.spoiler`, hatched), breach (styled),

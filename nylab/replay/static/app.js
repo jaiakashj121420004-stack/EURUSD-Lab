@@ -134,7 +134,8 @@ function renderDayTable() {
   state.filteredDays.forEach((r) => {
     const tr = document.createElement("tr");
     tr.className = "dayRow" + (r.date === state.currentTd ? " active" : "") + (state.blind ? " spoiler" : "");
-    tr.innerHTML = `<td data-label="Date">${state.blind ? "••••••" : r.date}</td><td data-label="Day">${names[r.weekday] ?? ""}</td><td data-label="NY rng">${r.ny_range_pips ?? "—"}</td><td data-label="Lon rng">${r.lon_range_pips ?? "—"}</td>`;
+    const mask = "••••••";
+    tr.innerHTML = `<td data-label="Date">${state.blind ? mask : r.date}</td><td data-label="Day">${names[r.weekday] ?? ""}</td><td data-label="NY rng">${state.blind ? mask : (r.ny_range_pips ?? "—")}</td><td data-label="Lon rng">${state.blind ? mask : (r.lon_range_pips ?? "—")}</td>`;
     tr.onclick = () => loadDay(r.date);
     tbody.appendChild(tr);
   });

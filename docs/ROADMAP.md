@@ -262,6 +262,10 @@ Akash's real hardware.**
 ## Phase 6 — Replay trainer v2 (2 days)
 - [ ] 6.1 Filters on session character, news families/surprise, raids, ADR ratio, advanced DSL.
 - [ ] 6.2 Hide-outcome columns + spoiler icons; blind mode. 6.3 Presets (save/load; agent-generated).
+  - Narrow slice done early (2026-09-27, standalone commit, not part of the design-system pass):
+    `renderDayTable()` was only masking the Date cell in blind mode, leaving NY/London range pips
+    visible -- now all three are masked. Rest of 6.2 (spoiler icons elsewhere, any other
+    hide-outcome columns) plus 6.1/6.3 still open.
 - [ ] 6.4 Review mode overlay of computed events/labels. 6.5 News markers (actual revealed at release).
 - [ ] 6.6 Challenge mode (sequence of filtered days, Maven rules). 6.7 Stats tab.
 **Accept:** REPLAY_TRAINER §9 item 2 + all earlier items still pass.

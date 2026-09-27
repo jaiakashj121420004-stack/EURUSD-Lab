@@ -1149,3 +1149,22 @@ on Akash's own laptop -- only in this cloud-linked device session -- CONFIRMED 2
 `run_tests.bat` (python 3.14.6, pandas 3.0.6, numpy 2.5.3) reports "176 passed in 148.50s" and
 "All tests passed on this machine." Phase 5.7 is now verified on both the cloud-linked device
 session and Akash's real hardware.
+
+## 2026-09-27 — blind-mode data-exposure fix (narrow slice of ROADMAP 6.2)
+
+Found while restyling the replay trainer (surface A design pass): `renderDayTable()` only ever
+masked the Date cell's text (`••••••`) in blind mode. The NY/London range pip columns were left
+fully visible (only dimmed via opacity for the spoiler-row look), so blind-mode training runs
+were leaking the exact outcome ranges the mode exists to hide.
+
+Fixed in its own standalone commit, separate from the design-system commit that found it (Akash's
+rule: design-system work and ROADMAP/logic work never share a commit). `renderDayTable()` now
+masks Date, NY rng, and Lon rng identically behind `••••••` whenever `state.blind` is true.
+
+Scope: this is only the piece of ROADMAP 6.2 needed to close the leak in the existing day table.
+6.2's fuller scope (spoiler icons elsewhere, any other hide-outcome columns) and 6.1/6.3 (filters,
+presets) are still open and unstarted.
+
+No pytest coverage changed (front-end JS, not exercised by the Python suite) — 176/176 still
+pass. This needs Akash to confirm visually: toggle blind mode in the replay trainer and check the
+day table no longer shows real NY/Lon range numbers.
