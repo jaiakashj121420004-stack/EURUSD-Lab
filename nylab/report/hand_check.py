@@ -17,11 +17,29 @@ import pandas as pd
 
 from nylab.report import deeplink
 from nylab.report.html import _css
+from nylab.sessions import _PREV_IN_CHAIN
 
 
 def _bar_td_h(df: pd.DataFrame, bar_idx: int) -> tuple:
     row = df.iloc[int(bar_idx)]
     return row["td"], float(row["h"])
+
+
+def _display_level_name(level_name: str, session: str) -> str:
+    """v4 (2026-09-28, hand-check follow-up part 4): Akash read 'prev_low' as "previous DAY's
+    low" and flagged two sweeps as wrong -- they weren't; 'prev_low'/'prev_high' have always
+    meant the IMMEDIATELY PRECEDING SESSION's low/high (nylab.sessions._PREV_IN_CHAIN, documented
+    in SESSIONS_AND_CONTEXT.md's took_prev_high/took_prev_low row), a different thing entirely
+    from `pdl`/`pdh` (previous CALENDAR DAY's low/high, its own separate level). The detector was
+    right both times; only the bare label was ambiguous. Spelling out which session -- e.g.
+    "prev_low (asia)" for a London-family raid -- removes the ambiguity without changing what's
+    detected or how. Display-only: every other level_name (pdl, pdh, pwl, pwh, ...) passes
+    through unchanged."""
+    if level_name in ("prev_low", "prev_high"):
+        pred = _PREV_IN_CHAIN.get(session)
+        if pred:
+            return f"{level_name} ({pred})"
+    return level_name
 
 
 def _bar_ny(df: pd.DataFrame, bar_idx: int) -> "pd.Timestamp":
@@ -126,12 +144,15 @@ def _sweep_row_html(row: pd.Series, replay_host: str, replay_port: int) -> str:
     # as the FVG rows above -- a level line alone doesn't show how far price actually poked
     # through it. v3: also bound it in time to the sweep's own bars (t_from/t_to, see
     # sample_sweeps) when available (only when hand-check.py's cmd passed sample_sweeps a df).
+    # v4: spell out which session prev_low/prev_high refers to (see _display_level_name) --
+    # Akash read "prev_low" as "previous day" and flagged two correct sweeps as wrong.
+    level_disp = _display_level_name(row["level_name"], row["session"])
     url = deeplink.replay_url(row["td"], row["t_raid_h"], host=replay_host, port=replay_port,
                                hi_top=row["level_price"], hi_bot=row["sweep_extreme"],
-                               hi_label=f"Swept {row['level_name']}",
+                               hi_label=f"Swept {level_disp}",
                                hi_from=row.get("t_from"), hi_to=row.get("t_to"))
     return (f"<tr><td>{pd.Timestamp(row['td']).date()}</td><td>{row['session']}</td>"
-            f"<td>{row['level_name']}</td><td>{row['side']}</td>"
+            f"<td>{level_disp}</td><td>{row['side']}</td>"
             f"<td>{row['penetration_pips']:.1f} pips</td>"
             f"<td>{row['bars_to_close_back'] if pd.notna(row['bars_to_close_back']) else '?'} bars</td>"
             f"<td><a href='{url}' target='_blank' rel='noopener'>Open in replay ↗</a></td></tr>")

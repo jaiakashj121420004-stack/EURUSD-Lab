@@ -226,6 +226,7 @@ async function refreshBars() {
   const qs = new URLSearchParams({ td: state.currentTd, tf: state.tf, until: state.until, context_days: 10 });
   const { bars } = await getJSON(`/api/bars?${qs}`);
   state.series.setData(bars);
+  state.barsCount = bars.length; // v3 (2026-09-28): zoomToRecentBars uses this -- see there for why
   if (bars.length) {
     state.lastBarTime = bars[bars.length - 1].time;
     state.chart.timeScale().scrollToPosition(2, false);
@@ -447,16 +448,24 @@ $("#jumpBtn").onclick = () => jumpToTime($("#jumpTime").value);
 // whole revealed day (refreshBars requests context_days: 10 and scrollToPosition(2, false) just
 // pins the right edge) -- fine for normal replay, but it makes a ~1 pip FVG/sweep band
 // (applyHighlightBand) invisible. Only used on the deep-link "look here" path (see init()), so it
-// never changes the zoom level of ordinary day-to-day replay use. Bar-interval seconds per state.tf
-// option (index.html's #tf select), used to size the visible window in wall-clock time.
-const TF_SECONDS = { M5: 300, M15: 900, H1: 3600, H4: 14400, D1: 86400 };
+// never changes the zoom level of ordinary day-to-day replay use.
+//
+// v3 (2026-09-28, hand-check follow-up part 3): the FIRST version of this used wall-clock time
+// (setVisibleRange with epoch seconds) -- broke completely for an FVG spanning a weekend (Friday
+// close to Sunday open, e.g. the 2026-05-11 row Akash flagged as "opens kinda weird"): 40 bars *
+// 5 minutes is only ~3.3 hours, nowhere near enough wall-clock time to reach back across ~48
+// silent weekend hours to where the actual bars are, so the computed window landed entirely
+// outside the loaded data -- an empty chart. Bar CHARTS (lightweight-charts) place bars by
+// LOGICAL POSITION (index), not continuous time -- consecutive bars sit next to each other on
+// screen no matter how much wall-clock time separates them (a weekend gap takes no visual
+// width). setVisibleLogicalRange (bar count, via state.barsCount -- set in refreshBars) is
+// immune to this because it never does time arithmetic at all.
 function zoomToRecentBars(nBars) {
-  if (!state.lastBarTime) return;
-  const barSec = TF_SECONDS[state.tf] || 300;
-  const untilEpoch = toEpoch(state.until);
-  state.chart.timeScale().setVisibleRange({
-    from: untilEpoch - nBars * barSec,
-    to: untilEpoch + Math.round(nBars * 0.25) * barSec, // breathing room past `until` (also keeps an edge-of-day highlight label off the right edge)
+  if (!state.barsCount) return;
+  const last = state.barsCount - 1;
+  state.chart.timeScale().setVisibleLogicalRange({
+    from: last - nBars,
+    to: last + Math.round(nBars * 0.25), // breathing room past `until` (also keeps an edge-of-day highlight label off the right edge)
   });
 }
 

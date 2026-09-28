@@ -2008,3 +2008,43 @@ Both disagreements are the `prev_low`/`prev_high` level specifically, both in Lo
 sessions. Investigating against FEATURES_SPEC.md before touching any code (per HANDOFF S4 Step
 3's own instruction, and the standing rule against changing detection logic without explaining
 it in plain English and confirming first).
+
+**Investigated the 2 sweep disagreements (`prev_low` in `lon`/`lon_sb`):** not a detection bug.
+`nylab/sessions.py`'s `_PREV_IN_CHAIN` (the session-order table this whole project uses,
+documented in `docs/SESSIONS_AND_CONTEXT.md`'s `took_prev_high/took_prev_low` row) maps `lon` and
+`lon_sb` back to `asia` -- so for a London-session raid, "prev_low" has always meant "the
+**immediately preceding session's** low", which is Asia for London. It is a completely different
+thing from `pdl` ("previous **day's** low", a separate level already used elsewhere on the same
+page/chart). The detector did exactly what it's supposed to on both flagged rows; the bare label
+"prev_low" on the hand-check page just reads like "previous day" to a human, which is a fair
+thing to find confusing. Proposed to Akash: relabel those two rows on the hand-check page only
+(e.g. "prev_low (asia)") -- a display change, not a rule/threshold/detection change, so it
+doesn't need the standing two-confirmations rule, but flagged to him anyway before touching it.
+
+**Investigated "the chart opens kinda in a weird way" (2026-05-11 FVG, 26.8 pips):** a REAL bug,
+in the highlight feature added this session, not the FVG detector -- confirmed the FVG itself is
+genuine (a real Friday-close-to-Sunday-open weekend gap). `zoomToRecentBars()` (added in part 4)
+used wall-clock time (`setVisibleRange` with epoch seconds) to pick the 40-bar zoom window; 40
+bars * 5 min is only ~3.3 hours, nowhere near enough to reach back across the ~48 silent weekend
+hours to where the actual candles are, so the computed window landed entirely outside the loaded
+data -- Akash was looking at a blank chart with the highlight box also broken (rendered as a
+giant meaningless block across the whole visible area). Fixed by switching to
+`setVisibleLogicalRange` (bar COUNT, immune to how much real time separates two bars) instead of
+wall-clock math. Verified: the weekend-gap row now renders normally (candles visible, box
+correctly framing the gap-down), and re-checked an ordinary weekday FVG for a regression -- still
+correct. Only `app.js` changed this round (no Python), so the existing 55 relevant tests already
+cover what could be affected and still pass; no new `run_tests.bat` needed for this one, just a
+quick look in the browser.
+
+**Akash confirmed 2026-09-28: go ahead.** `nylab/report/hand_check.py` now spells out which
+session `prev_low`/`prev_high` refers to (`_display_level_name`, keyed off
+`nylab.sessions._PREV_IN_CHAIN`, the same table the whole project already uses for this) -- e.g.
+the two flagged rows now read `prev_low (asia)` instead of bare `prev_low`. Display-only, both in
+the table cell and the on-chart highlight label; nothing about detection changed.
+`reports/hand_check/hand_check.html` regenerated -- confirmed both flagged rows now read
+`prev_low (asia)`. `test_hand_check.py`/`test_deeplink.py` (16 tests) still pass.
+
+**Phase 7 hand-check: CLOSED.** 10/10 FVGs confirmed, 10/10 sweeps confirmed (the 2 apparent
+disagreements were a display-labeling issue, now fixed, not a detection problem). No code changes
+to any detector this round -- only the hand-check page's own display and the replay trainer's
+UI/UX (all captured above). HANDOFF.md S4 Step 3 is done.
