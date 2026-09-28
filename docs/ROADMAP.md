@@ -416,9 +416,10 @@ Spec: FEATURES_SPEC.
 timeout -- not a flakiness concern, just wall-clock). User hand-verification of FVGs/sweeps in replay
 review mode is still open (see disclosed simplifications above).
 
-## Phase 8 — Verification, robustness, prop simulation (2 days) -- DONE pending Akash's browser check
-(Status per the 2026-09-28 finish-up. Code committed; sandbox-tested on both pandas ends and via
-`nylab run` end to end; still needs Akash's `run_tests.bat` + a real-browser gallery-link click.)
+## Phase 8 — Verification, robustness, prop simulation (2 days) -- DONE
+(Status per the 2026-09-28 finish-up. `run_tests.bat` passed on Akash's laptop (299 passed, 1
+warning, 291.52s). Akash clicked replay links from both report.html's gallery and trades.html in
+his real browser and confirmed both opened the correct day/time.)
 - [x] 8.1 "Open in replay" link for EVERY backtest trade, not just the gallery. The 30-trade gallery
       (`nylab/report/snapshot.py`, `deeplink.py`) keeps its PNG snapshots; a new, lighter `trades.html`
       (`nylab/report/trades_page.py`, no PNGs -- Akash had no preference on this, and PNGs for ~640
@@ -442,9 +443,9 @@ review mode is still open (see disclosed simplifications above).
       cost (once a fee is on file). Plain-English framing throughout: a high pass probability does NOT
       by itself mean the model has an edge -- section 4's own OOS verdict is what says that.
 **Accept:** user can open report.html offline, click any trade (gallery OR the full trades.html list),
-see it in replay. -- Still needs Akash to click 2-3 links in his own browser (HANDOFF.md §4 step 1.3,
-the 2026-09-28 app.js deep-link fix was only checked with node, never in a real browser) and to run
-`run_tests.bat` before this phase is considered fully closed.
+see it in replay. -- Confirmed 2026-09-28: Akash clicked a gallery link (2026-03-03, entry 8.58h ->
+opened ?date=2026-03-03&until=08:35, correct) and a trades.html link (2021-09-28, entry 9.75h ->
+opened ?date=2021-09-28&until=09:45, correct) in his real browser (Brave). Phase 8 is DONE.
 
 ## Phase 9 — Daily automation (1–2 days)
 - [ ] 9.1 Incremental bar export. 9.2 `run_daily.bat` + Windows Task Scheduler guide (after 17:30 NY).

@@ -1540,3 +1540,25 @@ names before writing anything (no partial report/summary left behind).
 
 **Not started this session:** HANDOFF.md §4 Steps 2-5 (closing Phase 5, the Phase 7 hand-check helper,
 Phase 9, Phase 10) -- next up once Step 1 is confirmed and committed.
+
+
+## 2026-09-28 (later still) — Phase 8 closed: run_tests.bat + browser check confirmed
+
+`run_tests.bat` on Akash's laptop: **299 passed, 1 warning in 291.52s (python 3.14.6, pandas
+3.0.6, numpy 2.5.3), "All tests passed on this machine."** Committed (54236c3) and pushed to
+GitHub (jaiakashj121420004-stack/EURUSD-Lab, main).
+
+Browser check (HANDOFF.md §4 step 1.3, done in Brave, real browser not node): Akash ran
+`python -m nylab run EURUSD_M5_2021-09-27_2026-09-25.csv --tz ny+7 --run-id browsercheck`, opened
+the resulting report.html and trades.html as local files, and clicked one deep link from each:
+- report.html gallery: 2026-03-03 card ("entry 8.58h NY") -> opened
+  `127.0.0.1:8765/?date=2026-03-03&until=08:35` -- 0.58h = 35min, correct, chart's vertical line
+  sat exactly at the entry.
+- trades.html (the new ROADMAP 8.1 page): 2021-09-28 row ("entry 9.75h NY") -> opened
+  `127.0.0.1:8765/?date=2021-09-28&until=09:45` -- 0.75h = 45min, correct.
+
+Both the 2026-09-28 app.js deep-link fix and this session's new trades.html are now verified in a
+real browser, not just with node. **Phase 8 is fully done.**
+
+Next: HANDOFF.md §4 Step 2 -- closing Phase 5 (label validation threshold, cross-session planted-
+edge test, the global-BH-vs-Bonferroni decision).
