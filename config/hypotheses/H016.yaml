@@ -1,5 +1,5 @@
 id: H016
-version: '1.0'
+version: '1.1'
 title: London chop -> NY AM killzone reversal of the London range
 decision_time_h: 5.0
 condition: lon.character == 'chop'
@@ -17,3 +17,10 @@ notes: |
   (S5.2's matrix-family rule -- "once you pick a cell because it looked extreme, you
   must count every cell of that matrix as tested"), not 1, via the matrix_cells
   weighting in nylab/ledger.py.
+
+  v1.1 (2026-09-28): bumped because `character`'s underlying rule changed (nylab/sessions.py
+  _label_character v3 -- trend_range's close_loc bound loosened from 0.20/0.80 to 0.25/0.75,
+  Akash-confirmed twice after label-validation rounds 4+5). This hypothesis's condition/
+  outcome text is unchanged; only what `character` itself means moved, so a fresh ledger
+  test under a bumped version is the honest way to record that this isn't the same
+  measurement as v1.0's ledger rows.

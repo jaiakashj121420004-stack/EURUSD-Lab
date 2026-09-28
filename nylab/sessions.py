@@ -237,13 +237,26 @@ def _label_character(s: pd.DataFrame) -> pd.Series:
     inside the session to keep er below 0.45. Thresholds (range_rel>=1.4, close_loc<=0.20/
     >=0.80) were set from his own flagged examples (lowest observed range_rel=1.48,
     loosest observed close_loc=0.17/0.94) with a little headroom -- not just AI-picked.
+
+    v3 (2026-09-28, Akash confirmed twice after label-validation round 5): `trend_range`'s
+    close_loc bound loosened from <=0.20/>=0.80 to <=0.25/>=0.75 -- made IDENTICAL to
+    `trend_er`'s own close_loc bound, rather than a new number. Round 4 (n=30) and round 5
+    (n=30, a disjoint fresh sample -- see label_validate.previously_reviewed_days) each
+    independently surfaced multiple "big range, closed near an extreme, chop only because the
+    close missed the 20%/80% line by a few points" disagreements (5 across round 4, 3 more in
+    round 5, e.g. 2025-12-24 nyam_kz: range_rel=1.66, close_loc=0.25 -- exactly on trend_er's
+    own line but 0.05 short of trend_range's stricter one). Verified against the FULL 5-year
+    cache before changing anything (RESEARCH_PROTOCOL.md's frozen-thresholds rule): this flips
+    42 of 3,580 real "chop" session-days to "trend" (1.2%) -- range_rel>=1.4 is UNCHANGED, only
+    the close_loc bound moved to match the sibling rule. H016 (the one hypothesis keyed off
+    `character`) bumped to v1.1 the same day.
     """
     took_high = s["took_prev_high"].fillna(False)
     took_low = s["took_prev_low"].fillna(False)
     quiet = s["range_rel"] < 0.6
     reversal = (took_high & (s["close_loc"] <= 0.35)) | (took_low & (s["close_loc"] >= 0.65))
     trend_er = (s["er"] >= 0.45) & ((s["close_loc"] >= 0.75) | (s["close_loc"] <= 0.25))
-    trend_range = (s["range_rel"] >= 1.4) & ((s["close_loc"] >= 0.80) | (s["close_loc"] <= 0.20))
+    trend_range = (s["range_rel"] >= 1.4) & ((s["close_loc"] >= 0.75) | (s["close_loc"] <= 0.25))
     trend = trend_er | trend_range
     range_both = s["both_sides"].fillna(False) & (s["close_loc"] > 0.35) & (s["close_loc"] < 0.65)
     chop = s["er"] < 0.25

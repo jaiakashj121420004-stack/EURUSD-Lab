@@ -123,12 +123,23 @@ def test_column_docs_registers_available_at_h_matching_S1_ends_and_covers_nyam_f
     # a low er alone shouldn't override an obviously decisive, wide session.
     (dict(range_rel=1.48, er=0.18, close_loc=0.94, took_prev_high=False, took_prev_low=False, both_sides=False), "trend"),
     (dict(range_rel=2.28, er=0.34, close_loc=0.05, took_prev_high=False, took_prev_low=False, both_sides=False), "trend"),
-    # a large range with only a mildly extreme close (inside the 0.20/0.80 band) must NOT
+    # a large range with only a mildly extreme close (inside the 0.25/0.75 band) must NOT
     # qualify via the alternate path -- range alone isn't enough, the close must be decisive too.
     (dict(range_rel=2.0, er=0.3, close_loc=0.5, took_prev_high=False, took_prev_low=False, both_sides=False), "normal"),
     # a strongly extreme close with only a normal-sized range must NOT qualify either -- both
     # conditions of the alternate path are required together.
     (dict(range_rel=1.0, er=0.3, close_loc=0.95, took_prev_high=False, took_prev_low=False, both_sides=False), "normal"),
+    # v3 (2026-09-28, Akash-confirmed twice after label-validation rounds 4+5): the alternate
+    # path's close_loc bound was loosened from 0.20/0.80 to 0.25/0.75 -- now IDENTICAL to the
+    # efficiency path's own bound above. A close sitting exactly at the new 0.25 line, with a
+    # big enough range, must now qualify (round 5's real example: 2025-12-24 asia,
+    # range_rel=1.66, close_loc=0.25, er=0.126 -- was chop under v2, is trend under v3).
+    (dict(range_rel=1.66, er=0.13, close_loc=0.25, took_prev_high=False, took_prev_low=False, both_sides=False), "trend"),
+    (dict(range_rel=1.66, er=0.13, close_loc=0.75, took_prev_high=False, took_prev_low=False, both_sides=False), "trend"),
+    # but still not one tick past that line -- v3 didn't just remove the close_loc requirement.
+    # (er=0.3, not 0.13, so this doesn't fall into "chop" via the UNRELATED er<0.25 rule instead --
+    # isolating the one thing this test actually checks: the alternate path's close_loc cutoff.)
+    (dict(range_rel=1.66, er=0.3, close_loc=0.26, took_prev_high=False, took_prev_low=False, both_sides=False), "normal"),
 ])
 def test_label_character_ordered_rules(row, expected):
     s = pd.DataFrame([row])
