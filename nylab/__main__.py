@@ -36,6 +36,8 @@ from nylab.report import robustness_section as robustness_section_mod
 from nylab.report import sessions_section as sessions_section_mod
 from nylab.report import summary as summary_mod
 from nylab.report import trades_page as trades_page_mod
+from nylab.report import hand_check as hand_check_mod
+from nylab import events_report as events_report_mod
 from nylab.replay import server as replay_server
 
 
@@ -301,6 +303,39 @@ def cmd_label_validate_build(args):
     print(f"  python -m nylab label-validate score <path-to-answers.json> --meta {meta_path}")
 
 
+def cmd_hand_check(args):
+    """HANDOFF.md S4 Step 3 / ROADMAP Phase 7's last open item: sample --fvg-n FVGs and
+    --sweep-n sweeps from the Phase 7.2/7.3 events table and write a small standalone HTML page
+    with a replay deep link for each, so Akash can hand-check them (no ledger/report involved --
+    this is a one-off spot-check, not a hypothesis test)."""
+    windows = cfg.legacy_windows()
+    print("Loading", args.csv)
+    df, mode, bar = _prepare_bars(args.csv, args.tz)
+    print(f"  {len(df):,} bars, {bar:.0f}-min, server-time mode: {mode}")
+    d = days_mod.build_days(df, windows)
+    sessions_cfg = cfg.sessions()
+
+    print("  building the Phase 7 events table (FVGs, raids/sweeps)...")
+    tables = events_report_mod.build_events_table(df, d, sessions_cfg, windows["pip"])
+    fvg, raids = tables["fvg"], tables["raids"]
+    n_sweeps_total = int((raids["raid_type"] == "sweep").sum()) if len(raids) else 0
+    print(f"  {len(fvg):,} FVGs total, {n_sweeps_total:,} sweeps total -- sampling "
+          f"{args.fvg_n} FVGs and {args.sweep_n} sweeps (seed {args.seed})")
+
+    fvg_sample = hand_check_mod.sample_fvgs(fvg, df, args.fvg_n, args.seed)
+    sweep_sample = hand_check_mod.sample_sweeps(raids, args.sweep_n, args.seed)
+    html = hand_check_mod.build(fvg_sample, sweep_sample,
+                                 replay_host=args.replay_host, replay_port=args.replay_port)
+
+    os.makedirs(args.out_dir, exist_ok=True)
+    out_path = os.path.join(args.out_dir, "hand_check.html")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"Wrote {len(fvg_sample)} FVGs + {len(sweep_sample)} sweeps to {os.path.abspath(out_path)}")
+    print(f"Start the replay trainer (python -m nylab replay {args.csv}), then open the HTML file "
+          f"above and click each \"Open in replay\" link.")
+
+
 def cmd_label_validate_score(args):
     """ROADMAP 5.6: score Akash's exported answers.json against the sampled meta payload --
     per-label agreement rate, flagged red if below the 80% accept bar."""
@@ -403,6 +438,18 @@ def main():
     p_lv_score.add_argument("answers")
     p_lv_score.add_argument("--meta", required=True)
     p_lv_score.set_defaults(func=cmd_label_validate_score)
+
+    p_hc = sub.add_parser("hand-check", help="HANDOFF S4 Step 3: sample FVGs + sweeps from the "
+                                              "Phase 7 events table with replay links, for Akash's manual check")
+    p_hc.add_argument("csv")
+    p_hc.add_argument("--tz", default="auto")
+    p_hc.add_argument("--fvg-n", type=int, default=10, dest="fvg_n")
+    p_hc.add_argument("--sweep-n", type=int, default=10, dest="sweep_n")
+    p_hc.add_argument("--seed", type=int, default=7)
+    p_hc.add_argument("--out-dir", dest="out_dir", default="reports/hand_check")
+    p_hc.add_argument("--replay-host", dest="replay_host", default="127.0.0.1")
+    p_hc.add_argument("--replay-port", dest="replay_port", type=int, default=8765)
+    p_hc.set_defaults(func=cmd_hand_check)
 
     p_cal = sub.add_parser("calendar-import", help="convert calendar_export.csv (or a fallback "
                                                      "CSV) into data/calendar.parquet (ROADMAP 4.2/4.4)")

@@ -396,8 +396,13 @@ Spec: FEATURES_SPEC.
   new `d` column/test.
 - `nylab.walkforward` does not refit/tune any parameter per fold -- Phase 7's models have no free
   parameters to refit; "fresh model per fold" is walk-STATE isolation, not walk-forward OPTIMIZATION.
-- **Not done, needs Akash**: the Accept line's "user hand-verifies 10 FVGs + 10 sweeps in replay review
-  mode" is a manual step in the replay UI that only Akash can perform -- everything machine-checkable
+- **Hand-check helper built 2026-09-28** (HANDOFF S4 Step 3): `python -m nylab hand-check <csv>`
+  samples 10 FVGs + 10 sweeps from the Phase 7.2/7.3 events table (stratified bull/bear and
+  across sessions, deterministic for a fixed --seed) and writes a small HTML page
+  (`nylab/report/hand_check.py`) with a replay deep link per row, so Akash can open each one in
+  the replay trainer and confirm the detector did what the row claims. 9 new tests
+  (`tests/test_hand_check.py`). The actual hand-check itself -- Akash clicking through the 20
+  links and confirming -- is still a manual step only he can do; everything machine-checkable
   (AT-01..04, truncation tests for every feature) is done and passing.
 
 **Bugs found and fixed during Phase 7 (disclosed in full):**

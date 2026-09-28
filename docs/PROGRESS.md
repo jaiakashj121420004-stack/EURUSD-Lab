@@ -1746,3 +1746,34 @@ undecided).
 
 Next: HANDOFF.md S4 Step 3 (Phase 7 hand-check helper -- 10 random FVGs + 10 random sweeps with
 replay deep links, for Akash's manual verification).
+
+## 2026-09-28 (Step 3 done) — Phase 7 hand-check helper built
+
+HANDOFF.md S4 Step 3: built the small helper Phase 7's own Accept line was still waiting on --
+Akash hand-verifying 10 FVGs + 10 sweeps in the replay trainer.
+
+**`nylab/report/hand_check.py`** (new): `sample_fvgs`/`sample_sweeps` pull a stratified,
+deterministic (fixed --seed) sample from `nylab.events_report.build_events_table`'s real tables
+-- FVGs stratified bull/bear, sweeps stratified across sessions, so a lopsided pool can't
+silently produce an all-one-kind sample. `build()` renders a small standalone HTML page (same
+CSS as report.html) listing each one with its key numbers (gap size/top-ce-bottom for FVGs;
+level/side/penetration for sweeps) and a `nylab.report.deeplink.replay_url` per row.
+
+**`nylab/__main__.py`**: new `python -m nylab hand-check <csv> [--fvg-n 10] [--sweep-n 10]
+[--seed 7] [--out-dir reports/hand_check]` subcommand -- loads bars, builds the events table
+once, samples, writes `hand_check.html`. No ledger/report involved (a one-off spot-check, not a
+hypothesis test, per HANDOFF's own framing).
+
+**9 new tests** (`tests/test_hand_check.py`): deterministic sampling, bull/bear and
+cross-session stratification, td/h lookup correctness, pool-size capping, a replay link per row,
+empty-sample handling. **319/319 tests pass on pandas 2.3.3 and 3.0.6.** `python -m nylab run`
+and the new `hand-check` command both verified end to end on the real 5-year CSV; real
+`research/ledger.csv` confirmed untouched (still 142 lines) by the `run` verification pass.
+
+A fresh `reports/hand_check/hand_check.html` (seed 7, 10 FVGs + 10 sweeps) is ready for Akash.
+**Next: Akash needs to (1) start the replay trainer (`python -m nylab replay
+EURUSD_M5_2021-09-27_2026-09-25.csv`), (2) open `reports/hand_check/hand_check.html` in a
+browser, and (3) click through the 20 "Open in replay" links, telling me plainly if anything
+looks wrong** -- any disagreement gets investigated against FEATURES_SPEC.md before any code
+changes, same discipline as every other verification this session. Phase 7 stays open until he
+does this and reports back.
