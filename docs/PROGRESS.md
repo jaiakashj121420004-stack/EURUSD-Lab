@@ -1777,3 +1777,234 @@ browser, and (3) click through the 20 "Open in replay" links, telling me plainly
 looks wrong** -- any disagreement gets investigated against FEATURES_SPEC.md before any code
 changes, same discipline as every other verification this session. Phase 7 stays open until he
 does this and reports back.
+
+## 2026-09-28 (UI/UX fix) — replay trainer's header/sidebar weren't showing on Akash's laptop
+
+Akash's report: "this ui/ux is unbarable. It has a lot of scrollable stuff and nothing is easy
+to navigate." His screenshot showed a bare candlestick chart with big scrollbars -- none of the
+header controls or the filters/day-list sidebar that `index.html` defines were visible.
+
+**Root cause**: `style.css`'s responsive rules collapsed the sidebar into a hidden drawer (behind
+an icon-only hamburger button) below 1440px of *CSS* viewport width. Checked Akash's own machine
+directly (via the device bridge, in his real Brave window): the page's logical width there is
+well under 1440px even though his screen/window is a normal size -- Windows display scaling
+and/or browser zoom shrinks the CSS pixel width below the raw screen resolution. So the "big
+desktop" 3-column layout was never showing for him; he was always in the collapsed-drawer tier,
+with no visible sign that a sidebar existed at all.
+
+**Three changes, all in `nylab/replay/static/`, no Python/data code touched:**
+1. **Lowered the responsive breakpoints** (`style.css`): 1440/1024/600px -> 1180/900/600px, so
+   the full 3-column layout (sidebar + chart + account panel, no drawers) now survives on a much
+   more typical laptop's effective CSS width.
+2. **The hamburger buttons now carry a visible text label** ("Days & filters" / "Account &
+   ticket") next to the icon, instead of being icon-only -- confirmed by testing at his actual
+   effective width that this is legible and clearly clickable.
+3. **One-time auto-open**: the first time a browser loads the page in "drawer" mode (<=1180px),
+   the day-navigator drawer now opens itself automatically (a `localStorage` flag stops it from
+   reopening on every reload) -- so the first thing Akash sees is the filters/day list, not a
+   bare chart with no visible way in. Manual open/close (hamburger click, Escape, overlay click)
+   works exactly as before.
+4. **Removed a nested scrollbar**: `#dayTableWrap` had its own `max-height`+`overflow-y:auto`
+   *inside* `#navigator`, which already scrolls -- a scrollbar-within-a-scrollbar. Dropped the
+   inner one so the whole sidebar (filters + day list) now scrolls as a single region.
+
+Verified end-to-end in his actual Brave browser via the device bridge (not just the internal
+preview pane): at his real effective width, the sidebar now opens automatically with visible
+labels, a day can be picked from the list (chart updates, row highlights, news ticker updates),
+Escape closes the drawer, and there's only one scrollbar in the sidebar instead of two.
+
+**Also fixed**: the `hand-check` command's own printed hint still said `python -m nylab replay
+{args.csv}` -- wrong, `replay` takes no CSV argument (this was the actual wrong command Akash
+hit twice before we found the right one). Corrected the message in `nylab/__main__.py`.
+
+No Python tests cover the static frontend files (`index.html`/`app.js`/`style.css` aren't
+imported by anything in `nylab/`), so this doesn't change the 319/319 pass count -- but Akash
+still needs to run `run_tests.bat` once more (nothing Python changed except the one print-string
+fix in `__main__.py`) before this gets committed, per our usual rule.
+
+**Next**: Akash refreshes the replay trainer in his browser and confirms it looks reasonable now.
+Once confirmed + `run_tests.bat` is green, this commits, and then the paused Phase 7 hand-check
+(10 FVG + 10 sweep links in `reports/hand_check/hand_check.html`) resumes from where it left off.
+
+## 2026-09-28 (UI/UX fix, part 2) — found and fixed the actual scrollbar bug
+
+Akash pushed back with two real screenshots from his own Brave: still a big scrollbar down the
+right edge and across the bottom of the *browser window itself*, and no visible tab to
+minimise/expand a panel. Went back in with real measurements on his own machine (via the device
+bridge, in his actual Brave tab) instead of guessing again.
+
+**Real root cause, found by reading the live page's computed layout**: `#chart`'s charting
+library sets an explicit pixel width on its own inner wrapper div. Because CSS grid/flex items
+default to `min-width: auto` (sized to fit their *content*, not their track) unless told
+otherwise, that inner div was forcing the whole `#chartArea` column -- and the whole page -- to
+balloon out to fit it. Measured on his machine: the chart's wrapper was set to `width: 3050px`
+against a column that should only have been ~720px wide, which pushed the account panel
+1020px off the right edge of the screen and forced the browser's own page-level scrollbars to
+appear (the ones he kept seeing). This is the same bug regardless of screen size/zoom -- it just
+happened to be visible on his machine and not obviously so on mine earlier.
+
+**Fix** (`nylab/replay/static/style.css`): added `min-width: 0; min-height: 0;` to every direct
+`#layout` grid child (`#navigator`, `#chartArea`, `#accountPanel`) and to `#chart` itself (plus
+`overflow: hidden` on the chart containers), so the browser is forced to size them to their
+actual grid track/flex space instead of growing to fit the chart's own inflated internal size.
+Verified on his machine: chart wrapper now correctly reports `width: 720px` (matching its real
+column), account panel sits fully on-screen, and `document.body.scrollWidth` exactly equals
+`window.innerWidth` -- zero page-level overflow in either direction.
+
+**Also added** (same UI/UX pass, addressing "no tab to minimise or expand"): the existing
+Days/Account tab buttons above the chart (previously phone-only, <600px) now also appear at
+600-899px width and function as an explicit open/close toggle for each drawer (click again to
+close) -- not just the topbar's icon+label buttons from the first pass.
+
+Verified end-to-end again in his real Brave tab via the device bridge: no console errors, full
+layout renders (sidebar + chart + account panel, or the correct drawer tier depending on width),
+day selection still works, `document.body.scrollWidth === window.innerWidth` confirmed by
+direct measurement.
+
+**Next**: Akash hard-refreshes the replay trainer and confirms. Once confirmed + a fresh
+`run_tests.bat`, this (and the earlier UI/UX commit) can be committed together as one ticket, then
+the paused Phase 7 hand-check resumes.
+
+## 2026-09-28 (UI/UX fix, part 3) — chart clutter, un-deselectable filter, sidebar collapse, scrollbar styling
+
+Akash's next round of feedback, with fresh screenshots: still a scrollbar he called "old
+design", a "Session character" filter he clicked once and couldn't click off again, a chart
+"messy" with overlapping text, and a request for a way to minimise the sidebars (like
+TradingView/MT5), not just the mobile-style drawer from part 1.
+
+**Four separate fixes, all in `nylab/replay/static/`:**
+
+1. **Chart decluttered.** Every news event (NFP, CPI, speeches, auctions -- dozens per day) was
+   getting its own full-text label drawn directly on the chart ("USD Chicago Fed National
+   Activity Index (scheduled)"), stacked in a ladder wherever several fell close together --
+   that was the actual "messy chart". `#newsStrip` (the ticker along the chart's bottom edge)
+   already shows the same events compactly with no overlap, so the on-chart duplicates were
+   pure clutter. Removed them from `applySessionMarkers()` in `app.js`; the small session-open
+   circle markers (London/Asia/NY, etc.) stay, since there are only a handful and they mark
+   actual chart structure.
+
+2. **"Session character" filter now actually deselects.** It was a native `<select multiple>`,
+   which (correctly, but confusingly) needs a Ctrl/Cmd-click to toggle a single value off again
+   -- a plain second click just re-selects it. Replaced the visible control with a row of chip
+   buttons (chop/quiet/normal/trend/reversal/range_both per session) where a single click toggles
+   that one value on or off. The underlying `<select>` is kept (now hidden) as the actual data
+   store, so `currentFilters()`/`applyPreset()` in `app.js` needed no logic changes -- only the
+   control wiring is new. Verified: click "normal" -> selected; click it again -> deselected,
+   confirmed by reading the real DOM state, not just the screenshot.
+
+3. **Sidebar/account-panel collapse**, independent of the drawer mechanism from part 1 -- a small
+   chevron button pinned to the inner edge of each panel (only shown once that panel is actually
+   inline, not a drawer: >=1180px for the navigator, >=900px for the account panel) collapses it
+   to a thin 40px strip and gives the chart that width back, one click to expand again --
+   TradingView/MT5-style. Remembered per browser via `localStorage` so it doesn't reset on every
+   reload.
+
+4. **Scrollbars restyled everywhere** (thin, rounded, theme-colored, via `scrollbar-width`/
+   `scrollbar-color` and the `::-webkit-scrollbar-*` properties) instead of the browser's default
+   OS scrollbar, which Akash called out by name as "old design type".
+
+Verified end-to-end again in Akash's real Brave tab via the device bridge: no console errors,
+chart only shows session markers (no more news-label ladder), the chip filter toggles on and off
+correctly (checked via direct DOM state, not just visually), both collapse buttons shrink/restore
+their panel and the chart reflows to use the reclaimed width, scrollbars render thin and
+theme-colored. No Python files changed this round -- static frontend only.
+
+**Next**: Akash hard-refreshes and confirms this round too. Once confirmed, a fresh
+`run_tests.bat` (nothing Python changed, so still 319/319 expected), then all three UI/UX
+passes commit together as one ticket, and the paused Phase 7 hand-check resumes.
+
+### 2026-09-28 (UI/UX fix, part 4) -- Akash couldn't find the gap on the chart
+
+While starting the paused Phase 7 hand-check (clicking through the FVG/sweep sample links),
+Akash's exact question was: *"I clicked the link and that is what i see. And where do i have to
+look for the gap?"* He was right to ask -- a real Fair Value Gap or sweep is often only about 1
+pip, and the replay trainer opened the deep link zoomed out to the whole trading day. A 1 pip
+move is physically smaller than a pixel at that zoom level, so there was genuinely nothing to
+see, not a matter of looking more carefully.
+
+**Fix: the deep link now points at the price, not just the time.**
+
+- `nylab/report/deeplink.py`'s `replay_url()` grew three optional extra parameters (`hi_top`,
+  `hi_bot`, `hi_label`) that get tacked onto the URL as `&hiTop=...&hiBot=...&hiLabel=...` when
+  given. No existing caller passes them, so every URL built the old way is unchanged (checked
+  against `tests/test_deeplink.py`).
+- `nylab/report/hand_check.py` now passes the FVG's top/bottom (or the sweep's level/extreme)
+  into every link it writes, with a short label ("FVG (bull)", "Swept prev_low", etc).
+- The replay trainer page (`app.js`/`style.css`) reads those three params when present and draws
+  a bright amber band across the chart at that exact price zone, with a small tag naming what it
+  is -- and zooms the chart in to roughly the last 40 bars around the link's time instead of the
+  whole day, so the band is a visible strip, not a hairline.
+- Opening a day normally (prev/next/random/date-picker), rather than via one of these links,
+  clears the band -- it's tied to the specific row that was clicked, not the day.
+
+Verified in Akash's real Brave tab via the device bridge, using the exact row from his
+screenshot (`2021-10-06`, FVG at 1.15571 +/-1 pip): the band and label now show up clearly,
+correctly zoomed. Also checked a sweep link (a much smaller ~0.3 pip band -- still visible as a
+thin bright line, since the band never draws thinner than 3px on screen) and confirmed clicking
+"next" afterwards clears the band with no leftover marks. No console errors either time.
+
+Tests: `test_deeplink.py` and `test_hand_check.py` (16 tests, the two files this touches) plus
+the three replay-server test files (39 tests) all pass here on pandas 2.3.3. I don't have Python
+3.11+ in my own sandbox to also check pandas 3.0.6 myself this round, so that -- and the full
+319-test suite -- still needs Akash's `run_tests.bat` to confirm, same as every round.
+
+**Next**: Akash re-opens the FVG row from his screenshot (or reruns `hand-check` himself -- the
+existing `reports/hand_check/hand_check.html` has already been regenerated with the new links) to
+confirm the band answers his question. Once he confirms and `run_tests.bat` comes back clean,
+this round (and the three UI/UX rounds before it) get committed, then the paused hand-check walk
+resumes.
+
+### 2026-09-28 (UI/UX fix, part 5) -- part 4's band was still confusing
+
+Akash's reaction to part 4: *"this is what i see when i open it and it say fvg is on the left,
+still a bit confusing"* (with a screenshot showing the amber band stretched across the entire
+chart, labelled "← FVG (bull)" sitting at the chart's left edge). He was right again -- a band
+spanning the WHOLE visible chart still reads as "the whole day is at this price", and the
+left-arrow label just floating at the chart's edge doesn't point at anything in particular.
+
+**Fix: bound the highlight in time too, not just price.** The FVG/sweep events already carry
+which bars actually formed them (an FVG is 3 consecutive candles; a sweep is the level-touch bar
+through wherever price stopped). `hand_check.py`'s `sample_fvgs`/`sample_sweeps` now also record
+those bars' own start/end times (`t_from`/`t_to`), `deeplink.py` carries them as two more
+optional URL params (`hiFrom`/`hiTo`), and the replay trainer now draws a small BOX bounded to
+exactly those bars, with the label sitting right on top of it -- instead of a full-width band.
+Also fixed in passing: a sweep's box often sits right at the chart's right edge (since replay
+hides everything after `until`, and a sweep's `until` IS the sweep bar) -- the label was getting
+clipped there against the account panel; it's now clamped to stay on-screen.
+
+Verified in Akash's real Brave tab via the device bridge, same two rows as part 4 (the FVG from
+his screenshot, plus a sweep): the box now sits tightly around the 2-3 candles that actually form
+the gap/sweep, the label reads clearly above it, and the sweep's label no longer clips off the
+right edge. No console errors. Tests (`test_deeplink.py`, `test_hand_check.py`, and the three
+replay-server files -- 55 tests total) still pass here on pandas 2.3.3;
+`reports/hand_check/hand_check.html` has been regenerated again with the new links.
+
+**Next**: same as part 4 -- Akash re-checks the row, reruns `run_tests.bat` (parts 4+5 both
+changed `nylab/report/deeplink.py` and `nylab/report/hand_check.py`, so this needs a fresh test
+run even though part 4's already came back 319/319 clean), then everything gets committed.
+
+**Confirmed 2026-09-28**: `run_tests.bat` on Akash's machine -- 319 passed, pandas 3.0.6, python
+3.14.6. All 5 UI/UX rounds (breakpoints/scrollbars/chart clutter/collapse/highlight band) verified
+and committed together as one ticket.
+
+---
+
+### 2026-09-28 -- Phase 7 hand-check: Akash's verdicts on the 10 FVGs + 10 sweeps
+
+HANDOFF.md S4 Step 3, the item Phase 7 was left open on. Akash went through
+`reports/hand_check/hand_check.html` (seed 7) and called each row against what he saw on the
+chart.
+
+**FVGs: 10/10 confirmed.** Every sampled FVG (bull and bear, 1.0 to 26.8 pips) was a real gap
+where the row said it was. One note, not a disagreement: the 2026-05-11 row (26.8 pips, by far
+the largest in the sample) -- Akash said "the chart opens kinda in a weird way for this link".
+Worth a look (see below) but he did still confirm the gap itself is real.
+
+**Sweeps: 8/10 confirmed, 2 disagreements** -- both on the SAME level name:
+- 2023-04-19 (session `lon_sb`, level `prev_low`): Akash says it swept Asia low, not prev_low.
+- 2023-06-08 (session `lon`, level `prev_low`): same disagreement.
+
+Both disagreements are the `prev_low`/`prev_high` level specifically, both in London-family
+sessions. Investigating against FEATURES_SPEC.md before touching any code (per HANDOFF S4 Step
+3's own instruction, and the standing rule against changing detection logic without explaining
+it in plain English and confirming first).

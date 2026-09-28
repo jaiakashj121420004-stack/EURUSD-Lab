@@ -24,6 +24,17 @@ def _bar_td_h(df: pd.DataFrame, bar_idx: int) -> tuple:
     return row["td"], float(row["h"])
 
 
+def _bar_ny(df: pd.DataFrame, bar_idx: int) -> "pd.Timestamp":
+    """v3 (2026-09-28, hand-check follow-up part 2): the plain NY-local timestamp of a bar,
+    clamped to the series' own bounds -- used to give the deep link's highlight a TIME window
+    (hi_from/hi_to), not just a price band. Akash's follow-up on the first version of the
+    highlight ("still a bit confusing") was that a band spanning the whole visible chart reads
+    as "the whole day is at this price", not "the gap is HERE" -- bounding it to the few bars
+    that actually formed the gap/sweep fixes that directly."""
+    i = max(0, min(int(bar_idx), len(df) - 1))
+    return df.iloc[i]["ny"]
+
+
 def sample_fvgs(fvg: pd.DataFrame, df: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
     """Samples up to `n` FVG rows, stratified bull/bear as evenly as the pool allows (so a
     lopsided bull/bear split in the data doesn't silently produce an all-bull or all-bear
@@ -49,12 +60,18 @@ def sample_fvgs(fvg: pd.DataFrame, df: pd.DataFrame, n: int, seed: int) -> pd.Da
     out = out.copy()
     out["td"] = tds
     out["h"] = hs
+    # The 3-bar FVG pattern is bar_idx-2, bar_idx-1, bar_idx -- t_from/t_to bound the highlight
+    # box to exactly those candles (see _bar_ny) instead of the whole visible chart.
+    out["t_from"] = [_bar_ny(df, i - 2) for i in out["bar_idx"]]
+    out["t_to"] = [_bar_ny(df, i + 1) for i in out["bar_idx"]]
     return out.sort_values("t").reset_index(drop=True).head(n)
 
 
-def sample_sweeps(raids: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
+def sample_sweeps(raids: pd.DataFrame, n: int, seed: int, df: pd.DataFrame = None) -> pd.DataFrame:
     """Samples up to `n` sweep-type raids (raid_type == 'sweep'), stratified across sessions as
-    evenly as the pool allows, same reasoning as sample_fvgs."""
+    evenly as the pool allows, same reasoning as sample_fvgs. `df` is optional (existing callers
+    that only want the raid rows themselves, no highlight window, can omit it) -- when given, it
+    adds t_from/t_to bounding the sweep's own bars, same purpose as sample_fvgs' t_from/t_to."""
     sweeps = raids[raids["raid_type"] == "sweep"] if len(raids) else raids
     if not len(sweeps):
         return sweeps
@@ -73,11 +90,30 @@ def sample_sweeps(raids: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
         if extra_n:
             extra_idx = rng.choice(remaining.index.to_numpy(), size=extra_n, replace=False)
             out = pd.concat([out, remaining.loc[extra_idx]])
-    return out.sort_values("t_raid").reset_index(drop=True).head(n)
+    out = out.sort_values("t_raid").reset_index(drop=True).head(n)
+    if df is not None and len(out):
+        # v3 (2026-09-28, hand-check follow-up part 2): bound the highlight to the actual sweep
+        # -- from the level touch (raid_idx) to just past whichever came later, the wick's
+        # extreme or the close-back (some sweeps never close back within the scan window:
+        # close_back_idx is then None/NaN, so fall back to extreme_idx alone).
+        def _to_idx(r):
+            cb = r["close_back_idx"]
+            return int(max(r["extreme_idx"], cb)) if pd.notna(cb) else int(r["extreme_idx"])
+        out = out.copy()
+        out["t_from"] = [_bar_ny(df, i) for i in out["raid_idx"]]
+        out["t_to"] = [_bar_ny(df, _to_idx(r) + 1) for _, r in out.iterrows()]
+    return out
 
 
 def _fvg_row_html(row: pd.Series, replay_host: str, replay_port: int) -> str:
-    url = deeplink.replay_url(row["td"], row["h"], host=replay_host, port=replay_port)
+    # v2 (2026-09-28): highlight the gap's own price band -- a 1-pip FVG is otherwise invisible
+    # on a whole-day chart (Akash's own question, "where do I have to look for the gap?").
+    # v3: also bound it in time to the 3 bars that formed it (t_from/t_to, see sample_fvgs) --
+    # a full-width band still read as "the whole day is at this price" (Akash's follow-up).
+    url = deeplink.replay_url(row["td"], row["h"], host=replay_host, port=replay_port,
+                               hi_top=row["top"], hi_bot=row["bottom"],
+                               hi_label=f"FVG ({row['direction']})",
+                               hi_from=row.get("t_from"), hi_to=row.get("t_to"))
     return (f"<tr><td>{pd.Timestamp(row['td']).date()}</td><td>{row['direction']}</td>"
             f"<td>{row['gap_pips']:.1f} pips</td><td>{row['top']:.5f} / {row['ce']:.5f} / {row['bottom']:.5f}</td>"
             f"<td>{'yes' if row['is_displacement_leg'] else 'no'}</td>"
@@ -86,7 +122,14 @@ def _fvg_row_html(row: pd.Series, replay_host: str, replay_port: int) -> str:
 
 
 def _sweep_row_html(row: pd.Series, replay_host: str, replay_port: int) -> str:
-    url = deeplink.replay_url(row["td"], row["t_raid_h"], host=replay_host, port=replay_port)
+    # v2 (2026-09-28): highlight the swept level -> the wick's furthest extreme, same reasoning
+    # as the FVG rows above -- a level line alone doesn't show how far price actually poked
+    # through it. v3: also bound it in time to the sweep's own bars (t_from/t_to, see
+    # sample_sweeps) when available (only when hand-check.py's cmd passed sample_sweeps a df).
+    url = deeplink.replay_url(row["td"], row["t_raid_h"], host=replay_host, port=replay_port,
+                               hi_top=row["level_price"], hi_bot=row["sweep_extreme"],
+                               hi_label=f"Swept {row['level_name']}",
+                               hi_from=row.get("t_from"), hi_to=row.get("t_to"))
     return (f"<tr><td>{pd.Timestamp(row['td']).date()}</td><td>{row['session']}</td>"
             f"<td>{row['level_name']}</td><td>{row['side']}</td>"
             f"<td>{row['penetration_pips']:.1f} pips</td>"

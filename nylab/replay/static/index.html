@@ -30,6 +30,7 @@
   <div class="group">
     <button id="navToggle" class="press drawerBtn" title="Days &amp; filters" aria-label="Open day navigator">
       <svg viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
+      <span class="drawerBtnLabel">Days &amp; filters</span>
     </button>
     <input type="date" id="datePicker">
     <button id="prevDay" class="press" title="Previous filtered day">&#9664; prev</button>
@@ -60,6 +61,7 @@
   </div>
   <button id="acctToggle" class="press drawerBtn" title="Account &amp; ticket" aria-label="Open account panel">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span class="drawerBtnLabel">Account &amp; ticket</span>
   </button>
   <button id="statsToggle" class="press iconBtn" title="Journal stats" aria-label="Open stats panel">
     <svg viewBox="0 0 24 24"><line x1="5" y1="20" x2="5" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="19" y1="20" x2="19" y2="14"/></svg>
@@ -78,6 +80,9 @@
 </div>
 <div id="layout">
   <aside id="navigator" class="elev-flat">
+    <button id="navCollapseBtn" class="press collapseBtn" title="Collapse this panel" aria-label="Collapse the day navigator">
+      <svg viewBox="0 0 24 24"><polyline points="14 6 8 12 14 18"/></svg>
+    </button>
     <div id="filters">
       <h3>Filters <span id="matchCount" class="muted"></span> <span id="spoilerBadge" class="spoilerBadge" style="display:none" title="A filter above is using outcome data that stays hidden in the table">&#9888; filter uses hidden data</span></h3>
       <label>From <input type="date" id="fFrom"></label>
@@ -96,19 +101,10 @@
 
       <details class="filterGroup">
         <summary>Session character</summary>
-        <div class="charFilterRow"><label>London</label><select multiple class="charSelect" data-sid="lon">
-          <option value="chop">chop</option><option value="quiet">quiet</option><option value="normal">normal</option>
-          <option value="trend">trend</option><option value="reversal">reversal</option><option value="range_both">range_both</option>
-        </select></div>
-        <div class="charFilterRow"><label>Asia</label><select multiple class="charSelect" data-sid="asia">
-          <option value="chop">chop</option><option value="quiet">quiet</option><option value="normal">normal</option>
-          <option value="trend">trend</option><option value="reversal">reversal</option><option value="range_both">range_both</option>
-        </select></div>
-        <div class="charFilterRow"><label>NY AM KZ</label><select multiple class="charSelect" data-sid="nyam_kz">
-          <option value="chop">chop</option><option value="quiet">quiet</option><option value="normal">normal</option>
-          <option value="trend">trend</option><option value="reversal">reversal</option><option value="range_both">range_both</option>
-        </select></div>
-        <p class="muted" style="margin:4px 0 0">Ctrl/Cmd-click to select more than one. Empty = any.</p>
+        <div class="charFilterRow"><label>London</label><div class="charChips" data-sid="lon"><button type="button" class="chip" data-value="chop">chop</button><button type="button" class="chip" data-value="quiet">quiet</button><button type="button" class="chip" data-value="normal">normal</button><button type="button" class="chip" data-value="trend">trend</button><button type="button" class="chip" data-value="reversal">reversal</button><button type="button" class="chip" data-value="range_both">range_both</button></div><select multiple class="charSelect" data-sid="lon" hidden><option value="chop">chop</option><option value="quiet">quiet</option><option value="normal">normal</option><option value="trend">trend</option><option value="reversal">reversal</option><option value="range_both">range_both</option></select></div>
+        <div class="charFilterRow"><label>Asia</label><div class="charChips" data-sid="asia"><button type="button" class="chip" data-value="chop">chop</button><button type="button" class="chip" data-value="quiet">quiet</button><button type="button" class="chip" data-value="normal">normal</button><button type="button" class="chip" data-value="trend">trend</button><button type="button" class="chip" data-value="reversal">reversal</button><button type="button" class="chip" data-value="range_both">range_both</button></div><select multiple class="charSelect" data-sid="asia" hidden><option value="chop">chop</option><option value="quiet">quiet</option><option value="normal">normal</option><option value="trend">trend</option><option value="reversal">reversal</option><option value="range_both">range_both</option></select></div>
+        <div class="charFilterRow"><label>NY AM KZ</label><div class="charChips" data-sid="nyam_kz"><button type="button" class="chip" data-value="chop">chop</button><button type="button" class="chip" data-value="quiet">quiet</button><button type="button" class="chip" data-value="normal">normal</button><button type="button" class="chip" data-value="trend">trend</button><button type="button" class="chip" data-value="reversal">reversal</button><button type="button" class="chip" data-value="range_both">range_both</button></div><select multiple class="charSelect" data-sid="nyam_kz" hidden><option value="chop">chop</option><option value="quiet">quiet</option><option value="normal">normal</option><option value="trend">trend</option><option value="reversal">reversal</option><option value="range_both">range_both</option></select></div>
+        <p class="muted" style="margin:4px 0 0">Click a chip to toggle it. Empty = any.</p>
       </details>
 
       <details class="filterGroup">
@@ -178,6 +174,9 @@
   </main>
 
   <aside id="accountPanel" class="elev-flat">
+    <button id="acctCollapseBtn" class="press collapseBtn collapseBtnRight" title="Collapse this panel" aria-label="Collapse the account panel">
+      <svg viewBox="0 0 24 24"><polyline points="10 6 16 12 10 18"/></svg>
+    </button>
     <h3>Maven account</h3>
     <div id="acctSummary" class="elev-raised-soft" style="padding:10px 12px;border-radius:var(--radius-card)"></div>
     <hr>

@@ -323,7 +323,7 @@ def cmd_hand_check(args):
           f"{args.fvg_n} FVGs and {args.sweep_n} sweeps (seed {args.seed})")
 
     fvg_sample = hand_check_mod.sample_fvgs(fvg, df, args.fvg_n, args.seed)
-    sweep_sample = hand_check_mod.sample_sweeps(raids, args.sweep_n, args.seed)
+    sweep_sample = hand_check_mod.sample_sweeps(raids, args.sweep_n, args.seed, df=df)
     html = hand_check_mod.build(fvg_sample, sweep_sample,
                                  replay_host=args.replay_host, replay_port=args.replay_port)
 
@@ -332,8 +332,9 @@ def cmd_hand_check(args):
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Wrote {len(fvg_sample)} FVGs + {len(sweep_sample)} sweeps to {os.path.abspath(out_path)}")
-    print(f"Start the replay trainer (python -m nylab replay {args.csv}), then open the HTML file "
-          f"above and click each \"Open in replay\" link.")
+    print(f"Start the replay trainer (python -m nylab replay -- no CSV argument, it reads from "
+          f"--cache-dir which is already built), then open the HTML file above and click each "
+          f"\"Open in replay\" link.")
 
 
 def cmd_label_validate_score(args):

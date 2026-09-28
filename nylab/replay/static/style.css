@@ -52,6 +52,25 @@
 }
 
 * { box-sizing: border-box; }
+/* v3 (2026-09-28, second UI/UX pass): the page itself must never scroll -- Akash's report was a
+   big scrollbar down the whole right edge of the BROWSER WINDOW plus one across the bottom, in
+   addition to the app's own intentional internal scroll areas (the sidebar's day list, the
+   chart's own pan, the news ticker). That outer pair was the html/body element scrolling because
+   nothing stopped it; #layout is sized to exactly fill the viewport (calc(100vh - 53px)) so the
+   page itself never needs to move -- only named containers inside it (#navigator, #dayTableWrap,
+   #newsStrip, the chart) scroll on their own. */
+html, body { height: 100%; overflow: hidden; }
+/* v4 (2026-09-28, third UI/UX pass): replace the browser's default OS scrollbar everywhere in the
+   app with a thin, theme-colored one -- Akash's own words were "OLD design type scrollbars",
+   and the stock scrollbar (wide, grey, square) really does clash with the rest of this
+   neumorphic design. Applies to every internal scroll container (#navigator, #dayTableWrap,
+   #newsStrip, the day-picker's <select multiple> chip lists, etc.) uniformly. */
+* { scrollbar-width: thin; scrollbar-color: rgba(var(--text-3-rgb), .4) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(var(--text-3-rgb), .4); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(var(--text-3-rgb), .65); }
+*::-webkit-scrollbar-corner { background: transparent; }
 body {
   margin: 0; font-family: var(--font-ui); font-size: 13px;
   background: var(--base); color: var(--text-1);
@@ -120,13 +139,37 @@ hr { border: none; border-top: 1px solid var(--glass-border-dim); margin: 10px 0
 #topbar .group { display: flex; gap: 6px; align-items: center; }
 #topbar label { margin-bottom: 0; }
 
-#layout { display: grid; grid-template-columns: 300px 1fr 260px; height: calc(100vh - 53px); }
-#navigator { padding: 12px; overflow-y: auto; }
+/* v3 (2026-09-28): column widths are CSS custom properties so the two collapse buttons below
+   can shrink a panel down to a thin strip (TradingView/MT5-style) without fighting the
+   responsive grid-template-columns overrides further down -- those still take over completely
+   below their own breakpoints (drawer tiers), where collapsing doesn't apply (the drawer's own
+   open/close already does that job). */
+#layout {
+  display: grid; grid-template-columns: var(--nav-w, 300px) 1fr var(--acct-w, 260px);
+  height: calc(100vh - 53px);
+}
+/* v3 (2026-09-28): every direct grid child needs min-width/min-height: 0 -- a grid (and flex)
+   item's default automatic minimum size is based on its CONTENT, not its track, so a child with
+   large intrinsic content (the chart canvas below) can force the whole grid/page wider than the
+   viewport instead of being clipped to its column. This is what was actually inflating the page
+   past its own width and pushing #accountPanel off-screen -- found by measuring the live page on
+   Akash's own machine (#chart's own inner wrapper had an explicit 3050px width against a ~720px
+   column). Fixing this is the real cure for the runaway horizontal scrollbar/off-screen panel;
+   the breakpoint and overflow changes above this stop it from being *invisible*, this stops it
+   from happening at all. */
+#layout > * { min-width: 0; min-height: 0; }
+#navigator { padding: 12px; overflow-y: auto; position: relative; }
+#navigator.collapsed, #accountPanel.collapsed { padding: 12px 4px; overflow: hidden; }
+#navigator.collapsed > :not(.collapseBtn), #accountPanel.collapsed > :not(.collapseBtn) { display: none; }
 #filters label { flex-direction: row; align-items: center; gap: 6px; }
 #fWeekdays { display: flex; gap: 8px; margin-bottom: 6px; }
 #fWeekdays label { flex-direction: row; }
 .presetRow { display: flex; gap: 6px; margin: 10px 0; }
-#dayTableWrap { max-height: 58vh; overflow-y: auto; margin-top: 10px; border-radius: var(--radius-card); }
+#dayTableWrap { margin-top: 10px; border-radius: var(--radius-card); }
+/* v2 (2026-09-28, UI/UX pass): dropped this wrap's own max-height/overflow so the day
+   table scrolls as part of #navigator's single scrollbar instead of nesting a second one
+   inside it -- Akash reported the replay page as "a lot of scrollable stuff", and a
+   scrollbar-within-a-scrollbar in the sidebar was one concrete cause. */
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--glass-border-dim); }
 th { color: var(--text-3); font-weight: 600; }
@@ -138,11 +181,11 @@ tr.dayRow.spoiler {
   background-image: repeating-linear-gradient(135deg, rgba(var(--text-3-rgb),.10) 0 6px, transparent 6px 12px);
 }
 
-#chartArea { display: flex; flex-direction: column; }
-#chart { flex: 1; position: relative; }
+#chartArea { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+#chart { flex: 1; position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 #playbar { display: flex; gap: 8px; align-items: center; padding: 10px 14px; flex-wrap: wrap; }
 
-#accountPanel { padding: 12px; overflow-y: auto; }
+#accountPanel { padding: 12px; overflow-y: auto; position: relative; }
 #acctSummary .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .badge {
   padding: 2px 9px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 700;
@@ -169,20 +212,77 @@ tr.dayRow.spoiler {
 .sessionBox { position: absolute; top: 0; bottom: 0; pointer-events: none; z-index: 1; }
 #chart.dragging-line { cursor: ns-resize; }
 
+/* v2 (2026-09-28, hand-check follow-up): the deep-link "look here" band (app.js applyHighlightBand)
+   for a hand-check FVG/sweep row -- a real one is often ~1 pip, invisible against the candles
+   without a bright, unmissable marker. A horizontal strip across the full chart width at the
+   FVG/sweep's price zone, plus a small label tab pointing at it from the left edge. z-index above
+   .sessionBox (which shades by TIME, not price) so the two never visually compete. */
+/* v3 (2026-09-28, hand-check follow-up part 2): JS now sets both `left` and `width` (bounding
+   the box in TIME to the actual gap/sweep bars, not the whole chart -- see applyHighlightBand),
+   so no fixed left/right here any more. */
+.hiBand {
+  position: absolute; pointer-events: none; z-index: 2;
+  background-color: rgba(255, 200, 0, .28);
+  border: 1px solid rgba(255, 200, 0, .9);
+}
+.hiBandLabel {
+  position: absolute; transform: translateY(-100%); margin-top: -4px;
+  padding: 2px 8px; border-radius: 4px; pointer-events: none; z-index: 3;
+  background: rgba(255, 176, 0, .95); color: #1a1200;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+
 /* ---------------------------------------------------------------- responsive (DESIGN_SYSTEM.md
-   S8): >=1440 the original 3-column grid; 1024-1439 chart + account panel, nav becomes a drawer;
-   600-1023 chart only, both nav and account become drawers; <600 phone, chart-first stacked
-   column with a bottom sheet (tabs above #layout) standing in for both drawers. Drawer buttons
-   and the sheet tab bar are inert (hidden) outside the ranges that need them. */
+   S8, breakpoints lowered 2026-09-28): >=1180 the original 3-column grid; 900-1179 chart +
+   account panel, nav becomes a drawer; 600-899 chart only, both nav and account become drawers;
+   <600 phone, chart-first stacked column with a bottom sheet (tabs above #layout) standing in
+   for both drawers. Drawer buttons and the sheet tab bar are inert (hidden) outside the ranges
+   that need them.
+   Lowered from the original 1440/1024/600 thresholds because Akash's own laptop -- a normal,
+   reasonably large screen -- was landing in the "nav becomes a drawer" tier with no visible
+   sidebar and only an icon-only hamburger to find it (his "unbarable ... nothing is easy to
+   navigate" report). 1440px logical width is a big, static desktop monitor, not a laptop with
+   any OS/browser zoom or scaling applied -- most laptop screens were always going to hit the
+   drawer tier under the old thresholds. */
 .drawerBtn, #sheetTabs { display: none; }
-.drawerBtn svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; }
+.drawerBtn {
+  /* v2 (2026-09-28): icon-only was too easy to miss -- Akash's own report ("nothing is easy to
+     navigate") -- so a visible label rides along the icon whenever the button is shown (it's
+     still hidden entirely above the 1180px breakpoint, where the sidebar is just always open). */
+  align-items: center; gap: 7px; font-weight: 700; color: var(--accent);
+}
+.drawerBtn svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; flex-shrink: 0; }
+.drawerBtnLabel { white-space: nowrap; }
+
+/* v3 (2026-09-28): a persistent collapse/expand control for the sidebar and account panel in
+   the WIDE, inline layout (not the drawer tiers, which already collapse/expand via the hamburger
+   + tab controls above) -- Akash asked for a TradingView/MT5-style way to reclaim chart width.
+   Hidden by default and only switched on at the width where each panel is actually inline. */
+.collapseBtn {
+  display: none; position: absolute; top: 10px; z-index: 3;
+  width: 26px; height: 26px; padding: 0; border-radius: 50%;
+  align-items: center; justify-content: center;
+}
+.collapseBtn svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
+#navCollapseBtn { right: 8px; }
+#navCollapseBtn.collapsed svg { transform: scaleX(-1); }
+.collapseBtnRight { left: 8px; }
+#acctCollapseBtn.collapsed svg { transform: scaleX(-1); }
+@media (min-width: 1180px) {
+  #navCollapseBtn { display: flex; }
+  #navigator { padding-top: 42px; } /* clears the heading from under the button, same row otherwise */
+}
+@media (min-width: 900px) {
+  #acctCollapseBtn { display: flex; }
+  #accountPanel { padding-top: 42px; }
+}
 #overlayDim {
   position: fixed; inset: 0; background: rgba(0,0,0,.32); opacity: 0; pointer-events: none;
   transition: opacity var(--t-med) var(--ease-glide); z-index: 60;
 }
 #overlayDim.on { opacity: 1; pointer-events: auto; }
 
-@media (max-width: 1439px) {
+@media (max-width: 1179px) {
   #layout { grid-template-columns: 1fr; }
   #navToggle { display: flex; }
   #navigator {
@@ -192,12 +292,20 @@ tr.dayRow.spoiler {
   }
   #navigator.open { transform: translateX(0); box-shadow: 8px 0 24px var(--shadow-dark); }
 }
-@media (min-width: 1024px) and (max-width: 1439px) {
+@media (min-width: 900px) and (max-width: 1179px) {
   #layout { grid-template-columns: 1fr 260px; }
 }
-@media (max-width: 1023px) {
+@media (max-width: 899px) {
   #layout { grid-template-columns: 1fr; }
   #acctToggle { display: flex; }
+  /* v3 (2026-09-28): a visible Days/Account tab pair, not just the topbar's icon buttons -- a
+     clear, obvious "tab to minimise or expand" each drawer (click the active tab again to close
+     it), per Akash's report. Below 600px (style.css's own phone block further down) these same
+     two buttons switch a permanently-visible bottom sheet instead; app.js tells the difference
+     by window width at click time. */
+  #sheetTabs { display: flex; gap: 6px; padding: 8px 16px 0; }
+  #sheetTabs button { flex: 1; border-radius: var(--radius-pill); padding: 7px 0; font-size: 12px; font-weight: 700; }
+  #sheetTabs button.active { color: var(--accent); box-shadow: inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light); }
   #accountPanel {
     position: fixed; top: 53px; bottom: 0; right: 0; width: min(300px, 86vw); z-index: 70;
     transform: translateX(105%); transition: transform var(--t-med) var(--ease-glide);
@@ -245,7 +353,7 @@ tr.dayRow.spoiler {
   #dayTableWrap td { border: none; padding: 2px 0; display: flex; justify-content: space-between; gap: 8px; }
   #dayTableWrap td::before { content: attr(data-label); color: var(--text-3); font-size: 11px; }
 }
-@media (min-width: 600px) { #sheetTabs { display: none; } }
+@media (min-width: 900px) { #sheetTabs { display: none; } }
 
 /* ---------- info-icon tooltip (tap-accessible, not hover-only -- DESIGN_SYSTEM.md S9) ---------- */
 .info-icon {
@@ -278,9 +386,23 @@ tr.dayRow.spoiler {
 .filterGroup { margin: 8px 0; border-radius: var(--radius-card); padding: 6px 8px; background: rgba(var(--text-3-rgb), .05); }
 .filterGroup summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-2); }
 .filterGroup label { flex-direction: row; align-items: center; gap: 6px; font-size: 12.5px; }
-.charFilterRow { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
-.charFilterRow label { min-width: 62px; font-size: 12px; color: var(--text-3); }
-.charSelect { flex: 1; font-size: 12px; }
+.charFilterRow { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.charFilterRow > label { font-size: 12px; color: var(--text-3); }
+/* v3 (2026-09-28): chips replace the old <select multiple> -- see index.html's comment. One
+   click toggles a single value; the underlying (now-hidden) <select> is still the real data the
+   rest of app.js reads/writes, this is purely the visible control. */
+.charChips { display: flex; flex-wrap: wrap; gap: 5px; }
+.charChips .chip {
+  padding: 3px 11px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 600;
+  color: var(--text-2); background: var(--base); border: none; cursor: pointer;
+  box-shadow: 3px 3px 7px var(--shadow-dark), -3px -3px 7px var(--shadow-light);
+  transition: box-shadow var(--t-fast) var(--ease-glide), color var(--t-fast) var(--ease-glide);
+}
+.charChips .chip:hover { color: var(--accent); }
+.charChips .chip.active {
+  color: var(--accent);
+  box-shadow: inset 3px 3px 7px var(--shadow-dark), inset -3px -3px 7px var(--shadow-light);
+}
 #fDslError:empty { display: none; }
 
 .spoilerBadge {

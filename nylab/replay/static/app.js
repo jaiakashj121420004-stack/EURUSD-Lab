@@ -194,6 +194,10 @@ async function loadDay(td) {
   state.startAtH = parseFloat($("#startAt").value);
   state.position = null;
   state.pendingOrder = null;
+  // Clear any deep-link "look here" band -- it belongs to the specific FVG/sweep row that was
+  // clicked, not to whatever day gets loaded next (init() re-sets it right after this call
+  // returns, on the one path where it's actually still wanted -- see init()).
+  state.hiBand = null;
   updateTicketUI();
   $("#datePicker").value = td;
 
@@ -289,6 +293,74 @@ function applySessionBoxes() {
     chartEl.appendChild(div);
     sessionBoxEls.push(div);
   });
+  applyHighlightBand();
+}
+
+// v2 (2026-09-28, hand-check follow-up): a "look here" marker for the deep link's optional
+// ?hiTop=&hiBot=&hiLabel=(&hiFrom=&hiTo=) params (nylab.report.deeplink.replay_url) -- a real
+// FVG or sweep penetration is often ~1 pip, completely invisible on a chart zoomed out to a
+// whole day (Akash: "where do I have to look for the gap?"). Drawn in price-axis coordinates
+// (priceToCoordinate) as well as time-axis ones when hiFrom/hiTo are given, so unlike
+// sessionBoxes it must also be redrawn whenever the PRICE scale changes, not just the time scale
+// -- applySessionBoxes already re-runs on every visible-range change and resize, so piggybacking
+// on it (call above) covers both.
+//
+// v3 (2026-09-28, hand-check follow-up part 2): Akash's reaction to v2 -- "it say fvg is on the
+// left, still a bit confusing" -- was that a band spanning the FULL chart width, labelled with a
+// left-arrow sitting at the left edge, reads as "the whole day is at this price" rather than
+// "the gap is HERE". When hiFrom/hiTo are present (both row types set them now, see
+// hand_check.py's sample_fvgs/sample_sweeps), draw a BOX bounded in time to just the bars that
+// formed the gap/sweep, with the label sitting right on top of it -- pointing at a specific spot
+// on the chart instead of a full-width strip. Falls back to the old full-width band when
+// hiFrom/hiTo aren't both available (defensive only -- shouldn't happen from hand_check.py).
+let highlightEls = [];
+function applyHighlightBand() {
+  const chartEl = $("#chart");
+  highlightEls.forEach((el) => el.remove());
+  highlightEls = [];
+  if (!state.hiBand || !state.series || !state.chart) return;
+  const { top, bot, label, from: hiFrom, to: hiTo } = state.hiBand;
+  const y0 = state.series.priceToCoordinate(Math.max(top, bot));
+  const y1 = state.series.priceToCoordinate(Math.min(top, bot));
+  if (y0 == null || y1 == null) return;
+
+  let left = 0, width = chartEl.clientWidth;
+  if (hiFrom && hiTo) {
+    const ts = state.chart.timeScale();
+    const x0 = ts.timeToCoordinate(toEpoch(hiFrom));
+    const x1 = ts.timeToCoordinate(toEpoch(hiTo));
+    // Off the left/right edge of the current view comes back null -- clamp to that edge rather
+    // than skip drawing, so the box still shows (just cut off) instead of vanishing entirely.
+    left = x0 == null ? 0 : x0;
+    const right = x1 == null ? chartEl.clientWidth : x1;
+    width = Math.max(right - left, 4); // a 1-bar-wide box would otherwise be a hairline
+  }
+
+  const band = document.createElement("div");
+  band.className = "hiBand";
+  band.style.left = `${left}px`;
+  band.style.width = `${width}px`;
+  band.style.top = `${y0}px`;
+  band.style.height = `${Math.max(y1 - y0, 3)}px`;
+  chartEl.appendChild(band);
+  highlightEls.push(band);
+  if (label) {
+    const tag = document.createElement("div");
+    tag.className = "hiBandLabel";
+    // Sits just above the box, at its left edge -- with the box now narrow (bounded in time,
+    // not full-width) this visibly points AT the highlighted bars rather than floating
+    // unconnected at the chart's own left edge like v2 did.
+    tag.style.top = `${y0}px`;
+    tag.textContent = label;
+    chartEl.appendChild(tag);
+    // A sweep's own highlight often sits right at `until` (the chart's right edge, since replay
+    // hides bars after it) -- a left-anchored label there would run off the edge and get clipped
+    // by #chart's overflow:hidden (invisible against the account panel next to it). Clamp AFTER
+    // appending, once the label's real rendered width is known.
+    const maxLeft = chartEl.clientWidth - tag.offsetWidth - 4;
+    tag.style.left = `${Math.max(0, Math.min(left, maxLeft))}px`;
+    highlightEls.push(tag);
+  }
 }
 
 function applySessionMarkers() {
@@ -296,17 +368,15 @@ function applySessionMarkers() {
     const t = toEpoch(tdPlusHours(state.currentTd, lo)); // see toEpoch() -- must match server epoch convention
     return { time: t, position: "aboveBar", color: cssVar("--text-3"), shape: "circle", text: name };
   }).filter((m) => m.time <= toEpoch(state.until));
-  // ROADMAP 6.5: news events share the same setMarkers() call (lightweight-charts v4 replaces
-  // the whole marker set each time it's called, so one combined array, not two competing calls).
-  // Only ever built from state.news, which itself only ever holds what /api/news already agreed
-  // to reveal -- no separate no-leak check needed here.
-  const newsMarkers = (state.news || []).map((e) => ({
-    time: e.time, position: "belowBar", shape: "square",
-    color: e.currency === "USD" ? cssVar("--accent") : cssVar("--amber"),
-    text: e.released ? `${e.currency} ${e.family || e.event_name}` : `${e.currency} ${e.family || e.event_name} (scheduled)`,
-  }));
-  const markers = [...sessionMarkers, ...newsMarkers].sort((a, b) => a.time - b.time);
-  try { state.series.setMarkers(markers); } catch (e) { /* time not in visible range yet */ }
+  // v3 (2026-09-28, UI/UX pass): news events used to ALSO get a full-text marker directly on the
+  // chart ("USD Chicago Fed National Activity Index (scheduled)"), one per event, stacked in a
+  // ladder wherever several fell close together -- Akash's "how messy the chart is" complaint.
+  // #newsStrip (the ticker along the bottom of the chart) already shows every one of these
+  // events with the same information in a compact, non-overlapping row, so the on-chart
+  // duplicates added clutter without adding information. Session markers (a handful of small
+  // circles marking London/Asia/NY open, etc.) stay -- there are only a few of them and they
+  // mark actual chart structure, not news.
+  try { state.series.setMarkers(sessionMarkers); } catch (e) { /* time not in visible range yet */ }
 }
 
 // PRE-EXISTING BUG FIX (found via Phase 6 smoke testing, see docs/PROGRESS.md): the server builds
@@ -373,6 +443,23 @@ function jumpToTime(hhmm) {
 }
 $("#jumpBtn").onclick = () => jumpToTime($("#jumpTime").value);
 
+// v2 (2026-09-28, hand-check follow-up): the default view after loadDay/jumpToTime shows the
+// whole revealed day (refreshBars requests context_days: 10 and scrollToPosition(2, false) just
+// pins the right edge) -- fine for normal replay, but it makes a ~1 pip FVG/sweep band
+// (applyHighlightBand) invisible. Only used on the deep-link "look here" path (see init()), so it
+// never changes the zoom level of ordinary day-to-day replay use. Bar-interval seconds per state.tf
+// option (index.html's #tf select), used to size the visible window in wall-clock time.
+const TF_SECONDS = { M5: 300, M15: 900, H1: 3600, H4: 14400, D1: 86400 };
+function zoomToRecentBars(nBars) {
+  if (!state.lastBarTime) return;
+  const barSec = TF_SECONDS[state.tf] || 300;
+  const untilEpoch = toEpoch(state.until);
+  state.chart.timeScale().setVisibleRange({
+    from: untilEpoch - nBars * barSec,
+    to: untilEpoch + Math.round(nBars * 0.25) * barSec, // breathing room past `until` (also keeps an edge-of-day highlight label off the right edge)
+  });
+}
+
 $("#playPause").onclick = () => {
   state.playing = !state.playing;
   $("#playPause").textContent = state.playing ? "⏸ pause" : "▶ play";
@@ -412,6 +499,33 @@ $("#fAdrMin").onchange = loadDayList;
 $("#fAdrMax").onchange = loadDayList;
 $("#fDslApply").onclick = loadDayList;
 $("#fDsl").addEventListener("keydown", (e) => { if (e.key === "Enter") loadDayList(); });
+
+// v3 (2026-09-28): session-character chips (index.html) are the visible control; the matching,
+// now-hidden <select multiple class="charSelect"> stays the real data store so currentFilters()/
+// applyPreset() above need no changes. A chip click just flips that one <option>'s .selected and
+// fires the same "change" event the old <select> fired, so the existing
+// `.charSelect -> loadDayList` wiring (a few lines up) still runs exactly as before.
+function syncCharChips() {
+  document.querySelectorAll(".charSelect").forEach((sel) => {
+    const chipsEl = document.querySelector(`.charChips[data-sid="${sel.dataset.sid}"]`);
+    if (!chipsEl) return;
+    chipsEl.querySelectorAll(".chip").forEach((btn) => {
+      const opt = [...sel.options].find((o) => o.value === btn.dataset.value);
+      btn.classList.toggle("active", !!(opt && opt.selected));
+    });
+  });
+}
+document.querySelectorAll(".charChips").forEach((chipsEl) => {
+  const sel = document.querySelector(`.charSelect[data-sid="${chipsEl.dataset.sid}"]`);
+  chipsEl.querySelectorAll(".chip").forEach((btn) => {
+    btn.onclick = () => {
+      const opt = [...sel.options].find((o) => o.value === btn.dataset.value);
+      opt.selected = !opt.selected;
+      btn.classList.toggle("active", opt.selected);
+      sel.dispatchEvent(new Event("change"));
+    };
+  });
+});
 
 // ---------------------------------------------------------------- trading + account
 $("#orderType").onchange = () => {
@@ -675,6 +789,7 @@ function applyPreset(name) {
     const wanted = (p.chars || {})[sel.dataset.sid] || [];
     [...sel.options].forEach((o) => { o.selected = wanted.includes(o.value); });
   });
+  syncCharChips();
   $("#fAdrMin").value = p.adr_min || "";
   $("#fAdrMax").value = p.adr_max || "";
   $("#fDsl").value = p.dsl || "";
@@ -699,27 +814,69 @@ $("#deletePreset").onclick = async () => {
 };
 
 // ---------------------------------------------------------------- responsive: drawers + sheet
-// (DESIGN_SYSTEM.md S8: nav/account become slide-in drawers below 1440px, and on phones (<600px)
-// both fold into a single bottom sheet the user switches between with the tabs above #layout.
-// Pure UI state -- opening/closing never re-fetches or changes what data is shown.)
+// (DESIGN_SYSTEM.md S8: nav/account become slide-in drawers below 1180px, and on phones (<600px)
+// both fold into a single, permanently-visible bottom sheet the user switches between with the
+// tabs above #layout. Pure UI state -- opening/closing never re-fetches or changes what data is
+// shown.
+// v3 (2026-09-28): the #sheetTabs Days/Account buttons are now also the visible "minimise /
+// expand" control for the two drawers on tablet/small-desktop widths (600-899px, see style.css)
+// -- Akash's report was that there was no obvious tab to collapse or reopen a panel. isPhone()
+// tells the two tab behaviours apart: below 600px the tabs just pick which of the two
+// permanently-shown bottom-sheet panels is visible (one is always on screen); at 600-899px they
+// instead open/close an actual drawer, and clicking the already-open one closes it.)
 const overlay = $("#overlayDim");
+function isPhone() { return window.innerWidth < 600; }
 function closeDrawers() {
   $("#navigator").classList.remove("open");
   $("#accountPanel").classList.remove("open");
   overlay.classList.remove("on");
+  if (!isPhone()) {
+    $("#tabDays").classList.remove("active");
+    $("#tabAccount").classList.remove("active");
+  }
+}
+function openDrawer(which) {
+  const sel = which === "days" ? "#navigator" : "#accountPanel";
+  $(sel).classList.add("open");
+  overlay.classList.add("on");
+  if (!isPhone()) $(which === "days" ? "#tabDays" : "#tabAccount").classList.add("active");
 }
 $("#navToggle").onclick = () => {
   const willOpen = !$("#navigator").classList.contains("open");
   closeDrawers();
-  if (willOpen) { $("#navigator").classList.add("open"); overlay.classList.add("on"); }
+  if (willOpen) openDrawer("days");
 };
 $("#acctToggle").onclick = () => {
   const willOpen = !$("#accountPanel").classList.contains("open");
   closeDrawers();
-  if (willOpen) { $("#accountPanel").classList.add("open"); overlay.classList.add("on"); }
+  if (willOpen) openDrawer("account");
 };
 overlay.onclick = closeDrawers;
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawers(); });
+
+// v3 (2026-09-28): persistent collapse/expand for the sidebar and account panel in the WIDE
+// layout (>=1180px keeps the navigator inline, >=900px keeps the account panel inline -- see
+// style.css) -- lets Akash reclaim chart width the way TradingView/MT5 let you collapse a panel,
+// independent of the drawer open/close mechanism used at narrower widths. Remembered per browser
+// via localStorage so it doesn't reset on every reload; falls back to "always expanded" if
+// localStorage is unavailable.
+const layoutEl = $("#layout");
+function safeLS(fn, fallback) { try { return fn(); } catch (e) { return fallback; } }
+function setCollapsed(which, collapsed) {
+  const panelSel = which === "nav" ? "#navigator" : "#accountPanel";
+  const btnSel = which === "nav" ? "#navCollapseBtn" : "#acctCollapseBtn";
+  const varName = which === "nav" ? "--nav-w" : "--acct-w";
+  const fullWidth = which === "nav" ? "300px" : "260px";
+  $(panelSel).classList.toggle("collapsed", collapsed);
+  $(btnSel).classList.toggle("collapsed", collapsed);
+  $(btnSel).title = collapsed ? "Expand this panel" : "Collapse this panel";
+  layoutEl.style.setProperty(varName, collapsed ? "40px" : fullWidth);
+  safeLS(() => localStorage.setItem(`eurusd-${which}-collapsed`, collapsed ? "1" : "0"), null);
+}
+$("#navCollapseBtn").onclick = () => setCollapsed("nav", !$("#navigator").classList.contains("collapsed"));
+$("#acctCollapseBtn").onclick = () => setCollapsed("account", !$("#accountPanel").classList.contains("collapsed"));
+setCollapsed("nav", safeLS(() => localStorage.getItem("eurusd-nav-collapsed") === "1", false));
+setCollapsed("account", safeLS(() => localStorage.getItem("eurusd-account-collapsed") === "1", false));
 
 // Phone-only bottom sheet: #navigator and #accountPanel share the same fixed-bottom slot
 // (style.css, <600px only) and this just picks which one is visible -- both keep their full,
@@ -730,9 +887,31 @@ function showSheetTab(which) {
   $("#navigator").classList.toggle("sheetActive", which === "days");
   $("#accountPanel").classList.toggle("sheetActive", which === "account");
 }
-$("#tabDays").onclick = () => showSheetTab("days");
-$("#tabAccount").onclick = () => showSheetTab("account");
-showSheetTab("days");
+function tabClick(which) {
+  if (isPhone()) { showSheetTab(which); return; }
+  const sel = which === "days" ? "#navigator" : "#accountPanel";
+  const wasOpen = $(sel).classList.contains("open");
+  closeDrawers();
+  if (!wasOpen) openDrawer(which);
+}
+$("#tabDays").onclick = () => tabClick("days");
+$("#tabAccount").onclick = () => tabClick("account");
+showSheetTab("days"); // sets the phone-only sheetActive default; harmless at other widths
+
+// v2 (2026-09-28): on a screen narrow enough that the day navigator is a hidden drawer (<=1179px,
+// see style.css), open it once automatically the first time this browser ever loads the page --
+// Akash's report was that the collapsed sidebar just looked like a bare chart with nothing to
+// navigate, and an icon-only button was easy to miss. A stored flag means this only happens once
+// per browser, not every reload, and a manual close (closeDrawers/Escape/overlay click) still
+// works exactly as before.
+(function () {
+  try {
+    if (window.innerWidth > 1179) return;               // sidebar is already inline, nothing to open
+    if (localStorage.getItem("eurusd-nav-intro-shown")) return;
+    localStorage.setItem("eurusd-nav-intro-shown", "1");
+  } catch (e) { /* localStorage unavailable -- skip the one-time nudge, not worth failing over */ return; }
+  openDrawer("days");
+})();
 
 // Generic tap-accessible info tooltip (DESIGN_SYSTEM.md S9: "not hover-only"). One shared
 // floating element, positioned next to whichever .info-icon was tapped; event-delegated so it
@@ -945,6 +1124,21 @@ $("#statsClose").onclick = () => $("#statsPanel").classList.remove("open");
     }
     await loadDay(deepTd);
     if (deepUntil) await jumpToTime(deepUntil);
+    // v2 (2026-09-28, hand-check follow-up): the "look here" band from ?hiTop=&hiBot=&hiLabel=
+    // (nylab.report.deeplink.replay_url, sent by hand_check.py's FVG/sweep rows). Set AFTER
+    // loadDay/jumpToTime, which both clear state.hiBand (see loadDay) -- and zoom the chart in
+    // to a handful of bars around `until` so a ~1 pip band is actually visible on first paint,
+    // instead of lost in the default whole-day view.
+    const hiTop = deepLinkParams.get("hiTop");
+    const hiBot = deepLinkParams.get("hiBot");
+    if (hiTop != null && hiBot != null) {
+      state.hiBand = {
+        top: Number(hiTop), bot: Number(hiBot), label: deepLinkParams.get("hiLabel") || "",
+        from: deepLinkParams.get("hiFrom"), to: deepLinkParams.get("hiTo"), // may be null -- see applyHighlightBand's fallback
+      };
+      zoomToRecentBars(40);
+      applyHighlightBand();
+    }
   } else if (state.filteredDays.length) {
     await loadDay(state.filteredDays[Math.floor(state.filteredDays.length / 2)].date);
   }
