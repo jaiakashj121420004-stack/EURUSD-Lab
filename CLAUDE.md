@@ -178,6 +178,9 @@ Session character: trend / reversal / range / chop / quiet · IS/OOS in/out-of-s
 
 ## 8. Read next (in this order)
 
+0. **`docs/HANDOFF.md` first** — current verified status, how to work in this setup, and the ordered
+   list of remaining work (added 2026-09-28).
+
 1. `docs/DATA_AND_TIME.md` 2. `docs/ARCHITECTURE.md` 3. `docs/SESSIONS_AND_CONTEXT.md`
 4. `docs/FEATURES_SPEC.md` 5. `docs/RESEARCH_PROTOCOL.md` 6. `docs/REPLAY_TRAINER.md`
 7. `docs/ROADMAP.md` — then start Phase 0.
