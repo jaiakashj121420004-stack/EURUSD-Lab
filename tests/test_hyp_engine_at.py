@@ -5,7 +5,10 @@ Bonferroni/BH) instead of v0's hardcoded significance check.
 AT-01 No false edges: on the clean synthetic fixture, zero hypotheses reach `survives-oos`.
 AT-02 Planted edge found: on the planted-edge fixture, the planted hypothesis (H005 --
 tests/fixtures/make_synth.py's plant_edge() forces exactly H005's condition to predict a down
-day) reaches `survives-oos` with hit >= 0.58.
+day) reaches `survives-oos` with hit >= 0.58. ROADMAP also requires a second, CROSS-SESSION
+planted edge in Phase 5 ("London chop -> NY AM reversal on 60% of such days") -- that's H016
+(config/hypotheses/H016.yaml), planted by the same fixture's plant_cross_session_edge() and
+checked below by test_at02b.
 
 Both use the 5-year fixtures: AT-01 for consistency with the Phase 0/1 golden baseline (also
 5y), AT-02 because the 2-year fixture doesn't give H005 enough samples to clear the strict
@@ -71,6 +74,22 @@ def test_at02_planted_edge_is_found(hyps, tmp_path):
     assert h005["verdict"] == "survives-oos", (
         f"AT-02 FAILED: H005 verdict={h005['verdict']!r}, want 'survives-oos' "
         f"(p={h005['p']:.6f}, oos_hit={h005['oos_hit']:.3f}, oos_n={h005['oos_n']})"
+    )
+
+
+def test_at02b_cross_session_planted_edge_is_found(hyps, tmp_path):
+    """AT-02's second, cross-session planted edge (ROADMAP's Global acceptance tests, added
+    Phase 5): "London chop -> NY AM reversal on 60% of such days" -- H016
+    (config/hypotheses/H016.yaml), planted by make_synth.py's plant_cross_session_edge()."""
+    d = _build_days("EURUSD_M5_synth_planted_5y.csv")
+    split_date = d.index[int(len(d) * 0.7)]
+    rows, _, m, alpha = hyp_engine.evaluate(d, hyps, split_date, run_id="at02b",
+                                             ledger_path=str(tmp_path / "ledger.csv"))
+    h016 = rows[rows["id"] == "H016"].iloc[0]
+    assert h016["hit"] >= 0.58, f"AT-02b FAILED: H016 hit={h016['hit']:.3f}, want >= 0.58"
+    assert h016["verdict"] == "survives-oos", (
+        f"AT-02b FAILED: H016 verdict={h016['verdict']!r}, want 'survives-oos' "
+        f"(p={h016['p']:.6f}, oos_hit={h016['oos_hit']:.3f}, oos_n={h016['oos_n']})"
     )
 
 
