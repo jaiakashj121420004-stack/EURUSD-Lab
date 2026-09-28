@@ -30,6 +30,7 @@ Disclosed in the generated HTML itself, not hidden.
 """
 from __future__ import annotations
 
+import glob
 import json
 import random
 from pathlib import Path
@@ -281,8 +282,35 @@ def _day_has_reviewable_row(row: pd.Series) -> bool:
     return not (pd.isna(dt) or dt == "normal_day")
 
 
+def previously_reviewed_days(out_dir: str) -> set:
+    """ROADMAP 5.6 audit fix (2026-09-28, Akash: "keep this the most accurate and foolproof"):
+    scans `out_dir` (the same folder every round's `sample_<seed>_meta.json` is written to) for
+    every day EVER shown to Akash in ANY past round, across every seed. Used so a fresh
+    verification round can genuinely exclude days he has already judged -- his own rule for the
+    5.6 threshold-change process ("verify against the full 5-year distribution ... generate a
+    fresh sample with a different seed", i.e. days he has not seen, not just a different RNG
+    seed that could still re-rank the same near-boundary days to the top of the curated fill).
+
+    Returns a set of `pd.Timestamp` (normalized, matching `days.index`'s own dtype). Missing or
+    unparseable meta files are skipped rather than raising -- this is a best-effort exclusion
+    list, not a source of truth (the actual answers live in the `*_answers*.json` files, which
+    this function does not touch)."""
+    seen: set = set()
+    for meta_path in sorted(glob.glob(str(Path(out_dir) / "sample_*_meta.json"))):
+        try:
+            meta = json.loads(Path(meta_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for day in meta.get("days", []):
+            td = day.get("td")
+            if td:
+                seen.add(pd.Timestamp(td).normalize())
+    return seen
+
+
 def sample_days_curated(days: pd.DataFrame, n: int = 14, seed: int = 44,
-                         min_per_label: int = MIN_PER_LABEL) -> list[pd.Timestamp]:
+                         min_per_label: int = MIN_PER_LABEL,
+                         exclude_days: frozenset = frozenset()) -> list[pd.Timestamp]:
     """Stratified-floor-then-near-threshold, round-4 revision (Akash, 2026-09-27: "less than 15
     days" + "normal should be removed"). Floor uses `_stratified_floor_greedy` (set-cover, 7
     days on the real cache, excluding "normal") rather than `sample_days()`'s independent-
@@ -304,7 +332,18 @@ def sample_days_curated(days: pd.DataFrame, n: int = 14, seed: int = 44,
     is moot (floor=7 is well under n=14), but it's still possible on a smaller/different cache
     (e.g. a shorter backtest window with fewer occurrences per label), so the guarantee is kept
     rather than silently dropped for the common case.
+
+    `exclude_days` (ROADMAP 5.6 audit fix, 2026-09-28): days dropped from the ENTIRE selection
+    pool -- both the floor and the ambiguity-ranked fill -- before anything else runs, typically
+    `previously_reviewed_days(out_dir)`'s result. Deliberately different from the "never restrict
+    to a previous round" principle described above: that principle is about not letting THIS
+    round's own selection be biased by which PAST cases caused disagreements (a look-ahead
+    concern), whereas excluding already-reviewed days entirely is about giving Akash a genuinely
+    fresh sample when he is specifically re-checking a hypothesis raised by earlier rounds -- the
+    two are different questions and this only answers the second one.
     """
+    if exclude_days:
+        days = days[~days.index.isin(exclude_days)]
     chosen = _stratified_floor_greedy(days, seed, min_per_label=min_per_label)
     rng = random.Random(seed)  # fresh instance for the fill tie-break; floor no longer threads one
     if len(chosen) >= n:
@@ -824,7 +863,12 @@ def score(answers: dict, payload: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build(cache_dir: str, sessions_cfg: dict, n: int = 14, seed: int = 44, strategy: str = "curated"):
+def build(cache_dir: str, sessions_cfg: dict, n: int = 14, seed: int = 44, strategy: str = "curated",
+          exclude_days: frozenset = frozenset()):
+    """`exclude_days` (ROADMAP 5.6 audit fix, 2026-09-28): see `previously_reviewed_days()` and
+    `sample_days_curated()`'s own docstrings -- only `strategy="curated"` uses it (a genuinely
+    fresh verification round is what it's for); `strategy="random"`'s `sample_days()` is left
+    exactly as it was, since nothing has asked for exclusion there."""
     from nylab import cache as cache_mod
     bars, days = cache_mod.load(cache_dir)
     missing = [f"{_PREFIX[sid]}_character" for sid in SESSIONS_TO_VALIDATE
@@ -837,7 +881,7 @@ def build(cache_dir: str, sessions_cfg: dict, n: int = 14, seed: int = 44, strat
     if strategy == "random":
         tds = sample_days(days, n=n, seed=seed)
     elif strategy == "curated":
-        tds = sample_days_curated(days, n=n, seed=seed)
+        tds = sample_days_curated(days, n=n, seed=seed, exclude_days=exclude_days)
     else:
         raise SystemExit(f"Unknown --strategy {strategy!r}; use 'curated' or 'random'.")
     payload = build_payload(bars, days, sessions_cfg, tds)

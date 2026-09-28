@@ -92,6 +92,45 @@ def test_sample_days_curated_deterministic_for_fixed_seed():
     assert a == b
 
 
+def test_sample_days_curated_exclude_days_removes_them_from_the_pool():
+    """ROADMAP 5.6 audit fix (2026-09-28): a genuinely fresh verification round must not be able
+    to re-select a day Akash has already judged."""
+    days = _fake_days_with_features()
+    baseline = lv.sample_days_curated(days, n=20, seed=43)
+    to_exclude = frozenset(baseline[:5])  # 5 days that WOULD have been picked
+    out = lv.sample_days_curated(days, n=20, seed=43, exclude_days=to_exclude)
+    assert not (set(out) & to_exclude)
+    assert len(out) >= 20  # the floor/fill guarantee still holds, just from the remaining pool
+
+
+def test_sample_days_curated_exclude_days_empty_is_a_no_op():
+    days = _fake_days_with_features()
+    a = lv.sample_days_curated(days, n=20, seed=43)
+    b = lv.sample_days_curated(days, n=20, seed=43, exclude_days=frozenset())
+    assert a == b
+
+
+def test_previously_reviewed_days_reads_every_meta_file_in_the_dir(tmp_path):
+    import json
+    (tmp_path / "sample_42_meta.json").write_text(json.dumps(
+        {"days": [{"td": "2022-03-11"}, {"td": "2022-04-13"}]}))
+    (tmp_path / "sample_44_meta.json").write_text(json.dumps(
+        {"days": [{"td": "2023-08-17"}, {"td": "2022-03-11"}]}))  # overlap with the first file
+    (tmp_path / "not_a_meta_file.json").write_text(json.dumps({"unrelated": True}))
+    out = lv.previously_reviewed_days(str(tmp_path))
+    assert out == {pd.Timestamp("2022-03-11"), pd.Timestamp("2022-04-13"), pd.Timestamp("2023-08-17")}
+
+
+def test_previously_reviewed_days_empty_dir_returns_empty_set(tmp_path):
+    assert lv.previously_reviewed_days(str(tmp_path)) == set()
+
+
+def test_previously_reviewed_days_skips_unparseable_file(tmp_path):
+    (tmp_path / "sample_1_meta.json").write_text("not valid json{{{")
+    (tmp_path / "sample_2_meta.json").write_text('{"days": [{"td": "2024-01-01"}]}')
+    assert lv.previously_reviewed_days(str(tmp_path)) == {pd.Timestamp("2024-01-01")}
+
+
 def test_sample_days_curated_prefers_near_boundary_days_over_random_fill():
     """The whole point of the curated strategy: beyond the shared stratified floor, its FILL
     days should sit closer to a rule boundary (lower `_day_ambiguity_score`) than the uniform-

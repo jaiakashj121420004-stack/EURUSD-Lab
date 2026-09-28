@@ -1562,3 +1562,37 @@ real browser, not just with node. **Phase 8 is fully done.**
 
 Next: HANDOFF.md §4 Step 2 -- closing Phase 5 (label validation threshold, cross-session planted-
 edge test, the global-BH-vs-Bonferroni decision).
+
+
+## 2026-09-28 (Step 2 start) — Phase 5.6: fresh-sample exclusion + round-5 built
+
+Continuing HANDOFF.md §4 Step 2. Akash confirmed (via the two-question ask) he wants the most
+robust option: exclude every already-reviewed day from a verification round, and to build it now.
+
+**`nylab/label_validate.py`:** new `previously_reviewed_days(out_dir)` scans every
+`sample_*_meta.json` in a folder and returns the union of every day ever shown across all past
+rounds. `sample_days_curated()` gained `exclude_days` (drops them from the whole selection pool
+-- both the floor and the near-threshold fill -- before anything else runs). `build()` threads
+it through. `nylab/__main__.py`'s `label-validate build` now calls `previously_reviewed_days`
+automatically by default (prints the count excluded) unless `--include-reviewed` is passed.
+Deliberately narrow: `sample_days()` (the old random strategy, rounds 1-2) is untouched --
+nothing asked for exclusion there, and the module's own "never restrict to a previous round"
+principle is about avoiding a DIFFERENT kind of look-ahead (this round's own selection being
+biased by which past days caused disagreements) -- explained in both docstrings so the two don't
+get confused later.
+
+5 new tests (`tests/test_label_validate.py`): exclude_days actually removes days from the pool
+while keeping the floor/fill guarantee; empty exclude_days is a no-op (existing rounds
+reproducible); `previously_reviewed_days` reads multiple files, dedupes overlaps, skips
+unparseable files, handles an empty dir. **304/304 tests pass on pandas 2.3.3 and 3.0.6.**
+`python -m nylab run` still completes end to end on the synthetic 5y fixture.
+
+**Round 5 built:** `research/label_validation/sample_46.html` (seed 46, curated, n=14) --
+excluded all 47 days from rounds 1/2 (sample_42) and round 4 (sample_44) automatically. Zero
+overlap confirmed. This round exists specifically to test the "extreme close_loc / big range,
+but chop by an er or range_rel margin" pattern flagged in round 4 (5 same-shape disagreements
+across two rounds, crossing Akash's own ">=3 same-shape cases" bar) -- sent to Akash for review.
+Same review process as before (open in browser, Agree/Disagree every row, download answers,
+`nylab label-validate score`); no threshold has been touched yet -- this is purely gathering
+independent evidence before any change is even proposed, per RESEARCH_PROTOCOL.md and Akash's
+own "verify on a fresh sample before changing anything" rule.

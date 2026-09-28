@@ -282,9 +282,13 @@ notes: ""
 def cmd_label_validate_build(args):
     """ROADMAP 5.6: sample days, package their bars + computed character/day_type labels into
     a single self-contained HTML page (no server needed) for Akash to click through offline."""
-    html, payload = label_validate.build(args.cache_dir, cfg.sessions(), n=args.n, seed=args.seed,
-                                          strategy=args.strategy)
     os.makedirs(args.out_dir, exist_ok=True)
+    exclude_days = frozenset() if args.include_reviewed else label_validate.previously_reviewed_days(args.out_dir)
+    if exclude_days:
+        print(f"  excluding {len(exclude_days)} day(s) already shown in a past round (--out-dir's "
+              f"own sample_*_meta.json files) -- pass --include-reviewed to disable this.")
+    html, payload = label_validate.build(args.cache_dir, cfg.sessions(), n=args.n, seed=args.seed,
+                                          strategy=args.strategy, exclude_days=exclude_days)
     html_path = os.path.join(args.out_dir, f"sample_{args.seed}.html")
     meta_path = os.path.join(args.out_dir, f"sample_{args.seed}_meta.json")
     with open(html_path, "w", encoding="utf-8") as f:
@@ -388,6 +392,12 @@ def main():
                                   "uniform-random fill, kept for reproducing old rounds.")
     p_lv_build.add_argument("--cache-dir", dest="cache_dir", default="data/cache")
     p_lv_build.add_argument("--out-dir", dest="out_dir", default="research/label_validation")
+    p_lv_build.add_argument("--include-reviewed", dest="include_reviewed", action="store_true",
+                             help="ROADMAP 5.6 audit fix (2026-09-28): by default, curated rounds "
+                                  "automatically EXCLUDE every day shown in any past round (scanned "
+                                  "from --out-dir's own sample_*_meta.json files), so a "
+                                  "verification round is genuinely fresh. Pass this to disable that "
+                                  "and allow already-reviewed days back into the pool.")
     p_lv_build.set_defaults(func=cmd_label_validate_build)
     p_lv_score = lv_sub.add_parser("score", help="score an exported answers.json against the sampled meta")
     p_lv_score.add_argument("answers")
