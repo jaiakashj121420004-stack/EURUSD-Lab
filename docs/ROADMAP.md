@@ -130,10 +130,21 @@ Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.
 - [x] 5.5 Report sections SESSIONS §6.
 - [ ] 5.6 **Label validation with the user:** replay 30 random days showing the computed labels; user marks
       agree/disagree; if agreement < 80% for a label, adjust thresholds *with him* and re-validate.
-      Status (audit 2026-09-28): 4 rounds done. Round 4: chop 22/30 = 73.3% (FAILS 80%), all other
-      labels pass. 5 same-shape "big range / extreme close but labelled chop" cases found -- a
-      threshold change needs a fresh-sample verification pass first (PROGRESS 2026-09-27 round 4).
-      **Waiting on Akash's go-ahead.**
+      Status (2026-09-28, round 6 scored): rounds 4-5 found and fixed the chop/trend close_loc
+      boundary gap (`_label_character` v3, H016 bumped to 1.1). Round 6 (14 fresh days, zero
+      overlap with rounds 1/2/4/5) confirms the fix: chop 97.1%, and every `character` label now
+      clears 80% (quiet 90%, range_both 80%, reversal 84.6%, trend 100%). `day_type`: inside_day
+      and trend_day 100%; `reversal_day` scored 50% (1/2) -- fails the raw bar but n=2, and the
+      one disagreement (2025-08-18) is the SAME already-disclosed "reversal always wins even at a
+      near-zero sweep margin" priority tension flagged in round 4 (PROGRESS 2026-09-27), not a
+      new pattern -- day took the prior day's high by only 1.7% of the day's own range, then
+      closed near the low. Round 4 hit this exact small-n situation before (`reversal_day` n=2
+      there too) and correctly did not act on it. **Waiting on Akash: close 5.6 now treating
+      `day_type reversal_day`'s small n as informational (matches round 4 precedent), or hold
+      for a `day_type`-focused round before ticking it.** `character` family and its threshold
+      change are validated either way.
+      Still owed regardless of that decision: AT-02's cross-session planted edge (never built --
+      see below), and the frozen-thresholds record in RESEARCH_PROTOCOL.md for `_label_character` v3.
 **Accept:** AT-02 incl. the cross-session planted edge; label validation ≥ 80% agreement.
 **Audit 2026-09-28:** the cross-session planted edge ("London chop → NY AM reversal on 60% of such days")
 was never built -- `make_synth.py` has no such variant and no test looks for it. Still owed.

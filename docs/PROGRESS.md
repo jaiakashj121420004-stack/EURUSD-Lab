@@ -1596,3 +1596,103 @@ Same review process as before (open in browser, Agree/Disagree every row, downlo
 `nylab label-validate score`); no threshold has been touched yet -- this is purely gathering
 independent evidence before any change is even proposed, per RESEARCH_PROTOCOL.md and Akash's
 own "verify on a fresh sample before changing anything" rule.
+
+
+## 2026-09-28 (Step 2 continued) — label-validation round 5 scored, `character` rule v3
+
+**Round 5** (`sample_46`, seed 46, 14 fresh days, zero overlap with rounds 1/2/4): chop 24/31
+(77.4%, still under 80%). Hand-verified all 7 chop disagreements against the raw range_rel/er/
+close_loc numbers (same independent-judge method as round 4):
+- **3 new confirmations of round 4's "big range, closed near an extreme, but the exact cutoff
+  missed it" pattern** -- e.g. 2025-12-24 asia (range_rel=1.66, close_loc=0.25 -- exactly on the
+  efficiency-path's own 0.25 line, but 0.05 short of the range-path's stricter 0.20 line) and
+  2021-11-08 lon_ny_gap (range_rel=1.28 just short of 1.4, close_loc=0.87 clearly extreme).
+  Combined with round 4's 3-4 instances, this is now confirmed on TWO independent, non-
+  overlapping samples -- Akash's own bar ("propose a threshold change only with >=3 same-shape
+  cases, verified fresh") is met.
+- **2 cases of a DIFFERENT shape** (extreme close, but small/normal range, not big) -- flagged
+  as NOT proposed for a fix: a small-range session closing near one edge isn't unusual by
+  chance, and loosening a rule to catch it risks mislabeling ordinary chop as trend.
+- **2 cases that don't fit any pattern** (close_loc wasn't actually near an extreme) -- rule
+  verdict stands.
+
+**Proposed to Akash in plain English, confirmed twice:** align `trend_range`'s close_loc bound
+(previously 0.20/0.80) with `trend_er`'s existing bound (0.25/0.75) -- not a new number, just
+making two paths in the same rule consistent. `range_rel>=1.4` unchanged. Verified against the
+full 5-year cache BEFORE changing anything: 42 of 3,580 real "chop" session-days would flip to
+"trend" (1.2%).
+
+**Change made** (`nylab/sessions.py` `_label_character`, v3): `trend_range`'s close_loc bound
+0.20/0.80 -> 0.25/0.75. `config/hypotheses/H016.yaml` bumped 1.0 -> 1.1 (the only hypothesis
+keyed off `character`; condition/outcome text unchanged, but what `character` means moved, so a
+fresh ledger row under the bumped version is the honest record). 3 new boundary tests added to
+`tests/test_sessions.py` (a close sitting exactly on the new 0.25/0.75 line now qualifies; one
+tick past it still doesn't).
+
+**Verified: 307/307 tests pass on pandas 2.3.3 and 3.0.6** (sandbox). `python -m nylab run`
+completes end to end on both the synthetic 5y fixture and the real 5-year CSV (real
+`research/ledger.csv` copied first, not written to directly).
+
+**Process note (own mistake, disclosed to Akash):** the earlier browser-check instruction
+(`nylab run ... --run-id browsercheck`) omitted `--ledger-path`, so it wrote 16 rows to the REAL
+`research/ledger.csv` instead of a copy -- against Akash's explicit rule. Checked the actual
+impact: `nylab.ledger.distinct_m` dedupes by (id, version), so these duplicate H001-H016 rows
+(identical values to the 2026-09-27 run, since it's the same code on the same data) do NOT
+inflate the Bonferroni `m` count. No statistical harm, but the rule was broken and Akash was
+told plainly rather than staying quiet about it. Every future demo/verification run must pass a
+copied `--ledger-path`, no exceptions.
+
+**Round 6 built** (`sample_47`, seed 47, 14 fresh days, excludes all 61 days shown across rounds
+1/2/4/5) to verify the v3 rule change actually clears the 80% bar on days never used to find or
+fix the pattern -- sent to Akash. **5.6 NOT yet ticked** -- waiting on round 6's score and
+Akash's `run_tests.bat` for this specific change.
+
+## 2026-09-28 (Step 2 continued) — round 6 scored: `character` v3 confirmed, `day_type reversal_day` flagged (small n)
+
+**Round 6** (`sample_47`, seed 47, 14 fresh days, excludes all 61 days shown across rounds
+1/2/4/5) -- this is the doubly-fresh sample specifically meant to test the `_label_character` v3
+change (0.20/0.80 -> 0.25/0.75) on days that played no part in finding or fixing it:
+
+| family | label | n | agree | passes 80%? |
+|---|---|---|---|---|
+| character | chop | 35 | 97.1% | yes |
+| character | quiet | 10 | 90.0% | yes |
+| character | range_both | 5 | 80.0% | yes |
+| character | reversal | 13 | 84.6% | yes |
+| character | trend | 11 | 100% | yes |
+| day_type | inside_day | 2 | 100% | yes |
+| day_type | reversal_day | 2 | 50.0% | **no** |
+| day_type | trend_day | 5 | 100% | yes |
+
+**`character` v3 is confirmed working.** `chop` jumped from 77.4% (round 5, old rule) to 97.1%
+(round 6, new rule, fresh days) -- exactly the before/after comparison the round was built for.
+Every other `character` label also clears 80%. No further threshold work needed on this family.
+
+**New below-80% label: `day_type reversal_day` (50%, 1/2).** Hand-verified against the actual
+cached `day_high`/`day_low`/`pdh`/`pdl` (same independent-judge method used all session, not
+just trusting the tally):
+
+- The one agree (2024-05-10): took the prior day's high by 19.5% of the day's own range, closed
+  at close_loc=0.305 (near the low). A real, unambiguous sweep-and-reverse.
+- The one disagree (2025-08-18, Akash's note: "trend"): took the prior day's high by only
+  **0.0001, 1.7% of the day's own range** -- essentially a touch, not a sweep -- then closed at
+  close_loc=0.075, deep into trend territory. The rule's `reversal` condition
+  (`took_high & close_loc<=0.35`) fires on that razor-thin touch and, because `reversal` is
+  applied AFTER `trend` in `_day_type`'s rule order, it overrides what would otherwise be
+  labelled `trend_day`. Akash's read (a trend day down, with a negligible wick above the prior
+  high) matches the price action; the rule's `reversal`-always-wins priority is what produced
+  the label he disagrees with.
+
+**This is not a new problem -- it's the same one already on record.** Round 4
+(2026-09-27, PROGRESS above) explicitly flagged "known 'reversal overrides near-trend' priority
+tension" for the `character` family's own reversal/trend interaction, and separately noted
+`reversal_day` at n=2 as "too small on several to mean much" without acting on it. Round 6 hits
+the exact same shape (n=2, one razor-thin-margin case) for `day_type`'s own copy of that same
+priority design. Per Akash's own evidence bar (>=3 same-shape cases on a fresh sample before any
+threshold/rule change), a single n=2 result across two different rounds is not enough to justify
+touching `_day_type`'s rule order or its `reversal` condition -- doing so on this little evidence
+risks the opposite mistake (mislabeling real reversal days as trend).
+
+**No code change proposed or made for this.** Docs updated; 5.6 left unticked pending Akash's
+call on how to close it out (see ROADMAP.md 5.6). `character` v3 itself is fully validated and
+does not need to wait on this.
