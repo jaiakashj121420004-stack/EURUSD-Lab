@@ -31,9 +31,11 @@ from nylab.report import charts as charts_mod
 from nylab.report import deeplink as deeplink_mod
 from nylab.report import gallery_section as gallery_section_mod
 from nylab.report import html as html_mod
+from nylab.report import maven_section as maven_section_mod
 from nylab.report import robustness_section as robustness_section_mod
 from nylab.report import sessions_section as sessions_section_mod
 from nylab.report import summary as summary_mod
+from nylab.report import trades_page as trades_page_mod
 from nylab.replay import server as replay_server
 
 
@@ -137,15 +139,49 @@ def cmd_run(args):
     meta = dict(file=os.path.basename(args.csv), first=f"{d.index[0]:%Y-%m-%d}", last=f"{d.index[-1]:%Y-%m-%d}",
                 tz=mode, bar=bar, split=f"{split_date:%Y-%m-%d}", n_days=len(d))
 
+    # ROADMAP 8.4: the Maven pass simulator. RESEARCH_PROTOCOL.md S5 item 5's own minimum-
+    # evidence bar (OOS >= 30 trades, "not proven" below that) gates this too -- bootstrapping a
+    # challenge simulation from fewer than 30 OOS trades would just be simulating noise. Computed
+    # BEFORE report_html is built so its own section (13) can be folded into extra_section, same
+    # as every other Phase 8 section.
+    oos_r = trades[trades.td >= split_date].R_net.to_numpy() if len(trades) else []
+    maven_df = None
+    maven_program_name = None
+    maven_program = None
+    maven_size = None
+    maven_fee_usd = None
+    if len(oos_r) >= 30:
+        prop_cfg = cfg.load_prop()
+        maven_program_name = args.maven_program or prop_cfg["default_program"]
+        if maven_program_name not in prop_cfg["programs"]:
+            sys.exit(f"--maven-program {maven_program_name!r} is not a key under `programs:` in "
+                      f"config/prop.yaml. Known programs: {', '.join(prop_cfg['programs'])}")
+        maven_program = prop_cfg["programs"][maven_program_name]
+        maven_size = prop_cfg.get("akash_account_size") or maven_program["sizes"][0]
+        maven_fee_usd = maven_program.get("fee_usd")  # only standard_2step has a verified fee (2026-09-28)
+        maven_trades_per_day = model_cfg.max_trades_per_day
+        print(f"  running Maven pass simulation ({maven_program_name}, ${maven_size:,.0f}, "
+              f"5,000 sims x 6 risk levels, {maven_trades_per_day} trade/day)...")
+        maven_df = maven_sim_mod.sweep_risk_grid(oos_r, maven_program, maven_size, n_sims=5_000, seed=42,
+                                                  fee_usd=maven_fee_usd, trades_per_day=maven_trades_per_day)
+        maven_df.to_csv(os.path.join(out_dir, "maven_simulation.csv"), index=False)
+    else:
+        print(f"  skipping Maven pass simulation -- only {len(oos_r)} OOS trades "
+              "(RESEARCH_PROTOCOL.md S5: need >= 30 for 'not proven', >= 100 preferred).")
+
     extra_section = sessions_section_mod.build(df, d, session_tables, sessions_cfg, cal, H, windows["pip"], figs)
     if len(trades):
         # ROADMAP 8.1/8.2: replay deep links point at whatever host/port the user will actually
         # launch `nylab replay` on -- args.replay_host/--replay_port default to the same
         # 127.0.0.1:8765 the replay CLI subcommand itself defaults to.
         extra_section += gallery_section_mod.build(trades, split_date, figs, seed=42,
-                                                     replay_host=args.replay_host, replay_port=args.replay_port)
+                                                     replay_host=args.replay_host, replay_port=args.replay_port,
+                                                     all_trades_href="trades.html")
     if robustness_result is not None:
         extra_section += robustness_section_mod.build(robustness_result)
+    if maven_df is not None:
+        extra_section += maven_section_mod.build(maven_df, maven_program_name, maven_program, maven_size,
+                                                   fee_usd=maven_fee_usd)
     report_html = html_mod.build(meta, d, H, m, trades, st_all, st_is, st_oos, figs, windows["pip"], model_params,
                                   extra_section=extra_section)
     with open(os.path.join(out_dir, "report.html"), "w", encoding="utf-8") as f:
@@ -154,21 +190,14 @@ def cmd_run(args):
     trades.to_csv(os.path.join(out_dir, "trades.csv"), index=False)
     H.to_csv(os.path.join(out_dir, "hypotheses.csv"), index=False)
 
-    # ROADMAP 8.4: the Maven pass simulator. RESEARCH_PROTOCOL.md S5 item 5's own minimum-
-    # evidence bar (OOS >= 30 trades, "not proven" below that) gates this too -- bootstrapping a
-    # challenge simulation from fewer than 30 OOS trades would just be simulating noise.
-    oos_r = trades[trades.td >= split_date].R_net.to_numpy() if len(trades) else []
-    if len(oos_r) >= 30:
-        prop_cfg = cfg.load_prop()
-        program_name = prop_cfg["default_program"]
-        program = prop_cfg["programs"][program_name]
-        size = prop_cfg.get("akash_account_size") or program["sizes"][0]
-        print(f"  running Maven pass simulation ({program_name}, ${size:,.0f}, 5,000 sims x 6 risk levels)...")
-        maven_df = maven_sim_mod.sweep_risk_grid(oos_r, program, size, n_sims=5_000, seed=42)
-        maven_df.to_csv(os.path.join(out_dir, "maven_simulation.csv"), index=False)
-    else:
-        print(f"  skipping Maven pass simulation -- only {len(oos_r)} OOS trades "
-              "(RESEARCH_PROTOCOL.md S5: need >= 30 for 'not proven', >= 100 preferred).")
+    # ROADMAP 8.1 audit fix (2026-09-28): "every backtest trade" gets an open-in-replay link, not
+    # just the 30-trade gallery -- a separate, much lighter page (a table, no snapshot PNGs; ~640
+    # trades of PNGs would bloat report.html) linked from the gallery section above.
+    if len(trades):
+        trades_html = trades_page_mod.build(trades, split_date, replay_host=args.replay_host,
+                                             replay_port=args.replay_port)
+        with open(os.path.join(out_dir, "trades.html"), "w", encoding="utf-8") as f:
+            f.write(trades_html)
 
     model_stats = None
     if st_all.get("n"):
@@ -183,6 +212,9 @@ def cmd_run(args):
 
     summ = summary_mod.build(run_id, meta, tz_check, H, m, model_stats, bonferroni_alpha=bonf_alpha)
     summ["data_quality"] = dq
+    if maven_df is not None:
+        summ["maven"] = maven_section_mod.summary_block(maven_df, maven_program_name, maven_size,
+                                                          fee_usd=maven_fee_usd)
     summary_mod.write(summ, os.path.join(out_dir, "summary.json"))
 
     ledger_mod.append(ledger_rows, path=ledger_path)
@@ -315,6 +347,11 @@ def main():
     p_run.add_argument("--calendar", default="data/calendar.parquet",
                         help="calendar cache from `nylab calendar-import` (ROADMAP Phase 4); "
                              "silently skipped if the file doesn't exist")
+    p_run.add_argument("--maven-program", dest="maven_program", default=None,
+                        help="which config/prop.yaml `programs:` key to Monte Carlo the Maven pass "
+                             "simulation against (ROADMAP 8.4); default is prop.yaml's own "
+                             "default_program (standard_2step) -- pass this to try another program "
+                             "without editing the YAML")
     p_run.set_defaults(func=cmd_run)
 
     p_replay = sub.add_parser("replay", help="launch the offline replay trainer (opens your browser)")

@@ -31,6 +31,10 @@ programs:
     daily_dd_reset: "00:00 UTC, based on the higher of equity or balance"
     min_profitable_days_per_phase: 3
     min_profit_per_profitable_day_pct: 0.5
+    # Akash-confirmed 2026-09-28: what he actually pays per $5k attempt on this program (not
+    # scraped from the site -- he stated it directly). Re-verify before relying on it if the
+    # account size changes; Maven's fee schedule is per-size, this number is for $5,000 only.
+    fee_usd: 23
 
   standard_3step:
     label: "Standard 3-Step"
@@ -84,4 +88,4 @@ news_restriction: >
   news release. Violation = challenge failure. Weekend position holding is permitted on all
   account types.
 
-default_program: standard_2step
+default_program: standard_2step  # override per-run with `nylab run --maven-program <name>`

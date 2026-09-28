@@ -33,9 +33,15 @@ import pandas as pd
 
 
 def _simulate_one_phase(trades_r: np.ndarray, program: dict, size: float, risk_pct: float,
-                         target_pct: float, max_days: int, rng: np.random.Generator) -> dict:
+                         target_pct: float, max_days: int, rng: np.random.Generator,
+                         trades_per_day: int = 1) -> dict:
     """One bootstrap walk through a single evaluation phase. Returns {'passed', 'days_used',
-    'failed_breach'} for this one simulated attempt at this one phase."""
+    'failed_breach'} for this one simulated attempt at this one phase.
+
+    `trades_per_day` (ROADMAP 8.4 audit fix, 2026-09-28): comes from the model's own YAML
+    (nylab.config.ModelConfig.max_trades_per_day) rather than being assumed as 1 here -- every
+    Phase 7 model is currently one-trade-per-day, so trades_per_day=1 reproduces the exact old
+    behaviour bit-for-bit; this only matters once a future model can fire more than once a day."""
     if target_pct <= 0:
         # config/prop.yaml's `instant`/`mini` programs have an empty profit_targets_pct list --
         # no evaluation phase at all (already funded) -- callers skip this function for those,
@@ -51,22 +57,26 @@ def _simulate_one_phase(trades_r: np.ndarray, program: dict, size: float, risk_p
     balance = size
     peak_balance = size
     n_profitable_days = 0
+    trades_per_day = max(1, int(trades_per_day))
 
     for day in range(1, max_days + 1):
         day_start_balance = balance
-        r = rng.choice(trades_r)
-        risk_dollars = balance * (risk_pct / 100.0)
-        balance = balance + r * risk_dollars
+        # Each of today's `trades_per_day` trades is checked against both drawdown limits
+        # immediately (a breach can happen mid-day, on trade 1 of 3, not just at day's end).
+        for _ in range(trades_per_day):
+            r = rng.choice(trades_r)
+            risk_dollars = balance * (risk_pct / 100.0)
+            balance = balance + r * risk_dollars
 
-        peak_balance = max(peak_balance, balance) if is_trailing else size
+            peak_balance = max(peak_balance, balance) if is_trailing else size
 
-        day_loss_pct = max(0.0, (day_start_balance - balance) / size * 100.0)
-        if day_loss_pct >= daily_dd_limit:
-            return dict(passed=False, days_used=day, failed_breach=True)
+            day_loss_pct = max(0.0, (day_start_balance - balance) / size * 100.0)
+            if day_loss_pct >= daily_dd_limit:
+                return dict(passed=False, days_used=day, failed_breach=True)
 
-        dd_from_peak_pct = max(0.0, (peak_balance - balance) / size * 100.0)
-        if dd_from_peak_pct >= max_dd_limit:
-            return dict(passed=False, days_used=day, failed_breach=True)
+            dd_from_peak_pct = max(0.0, (peak_balance - balance) / size * 100.0)
+            if dd_from_peak_pct >= max_dd_limit:
+                return dict(passed=False, days_used=day, failed_breach=True)
 
         day_pnl_pct = (balance - day_start_balance) / size * 100.0
         if day_pnl_pct >= min_profit_per_day_pct and day_pnl_pct > 0:
@@ -81,7 +91,7 @@ def _simulate_one_phase(trades_r: np.ndarray, program: dict, size: float, risk_p
 
 def simulate_challenge(trades_r: Sequence[float], program: dict, size: float, risk_pct: float,
                         n_sims: int = 5000, max_days: int = 250,
-                        seed: Optional[int] = None) -> dict:
+                        seed: Optional[int] = None, trades_per_day: int = 1) -> dict:
     """Monte Carlo's `n_sims` full attempts (every phase in `program['profit_targets_pct']`,
     sequentially, a phase failure ends the whole attempt) at ONE `risk_pct` for ONE program.
 
@@ -113,7 +123,8 @@ def simulate_challenge(trades_r: Sequence[float], program: dict, size: float, ri
             reached_phase[0] += 1
         else:
             for k, target_pct in enumerate(targets):
-                res = _simulate_one_phase(trades_r, program, size, risk_pct, target_pct, max_days, rng)
+                res = _simulate_one_phase(trades_r, program, size, risk_pct, target_pct, max_days, rng,
+                                           trades_per_day=trades_per_day)
                 total_days += res["days_used"]
                 if not res["passed"]:
                     all_passed = False
@@ -136,7 +147,8 @@ def simulate_challenge(trades_r: Sequence[float], program: dict, size: float, ri
 def sweep_risk_grid(trades_r: Sequence[float], program: dict, size: float,
                      risk_grid: Sequence[float] = (0.25, 0.5, 0.75, 1.0, 1.25, 1.5),
                      n_sims: int = 5000, max_days: int = 250,
-                     seed: Optional[int] = None, fee_usd: Optional[float] = None) -> pd.DataFrame:
+                     seed: Optional[int] = None, fee_usd: Optional[float] = None,
+                     trades_per_day: int = 1) -> pd.DataFrame:
     """ROADMAP 8.4's own wording: "for risk 0.25-1.5%" -- runs simulate_challenge() once per
     `risk_grid` value (same `seed` reused for each, so the only thing that differs between rows
     is risk_pct, not the random draws) and returns one row per risk level.
@@ -148,7 +160,7 @@ def sweep_risk_grid(trades_r: Sequence[float], program: dict, size: float,
     rows = []
     for risk_pct in risk_grid:
         res = simulate_challenge(trades_r, program, size, risk_pct, n_sims=n_sims,
-                                  max_days=max_days, seed=seed)
+                                  max_days=max_days, seed=seed, trades_per_day=trades_per_day)
         if fee_usd is not None and np.isfinite(res["expected_attempts_to_pass"]):
             res["expected_cost_usd"] = fee_usd * res["expected_attempts_to_pass"]
         rows.append(res)

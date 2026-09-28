@@ -61,6 +61,12 @@ class ModelConfig:
     # so nylab.backtest.run_backtest_with_context_filter can report filtered/unfiltered/
     # complement results without every caller re-parsing the YAML by hand.
     context_filter: str | None = None
+    # ROADMAP 8.4 audit fix (2026-09-28): the Maven pass simulator used to just assume "one trade
+    # per simulated day" in a code comment. Every Phase 7 model IS one-trade-per-day today (see
+    # nylab.backtest.run_backtest's `one_trade_per_day` default), so this defaults to 1 -- but it
+    # now lives in the model's own YAML (optional `max_trades_per_day:` key) so a future model that
+    # can fire more than once a day doesn't silently get simulated as if it couldn't.
+    max_trades_per_day: int = 1
 
 
 def load_model(model_name: str) -> ModelConfig:
@@ -72,7 +78,8 @@ def load_model(model_name: str) -> ModelConfig:
         # context_filter should never silently disable itself.
         hyp_dsl.validate(hyp_dsl.parse(context_filter))
     return ModelConfig(name=raw["name"], version=str(raw["version"]), params=dict(raw["params"]),
-                        description=raw.get("description", ""), context_filter=context_filter)
+                        description=raw.get("description", ""), context_filter=context_filter,
+                        max_trades_per_day=int(raw.get("max_trades_per_day", 1)))
 
 
 def load_prop(name: str = "prop.yaml") -> dict:

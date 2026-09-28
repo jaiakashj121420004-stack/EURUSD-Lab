@@ -1490,3 +1490,53 @@ in a real browser; Akash should click a gallery link once on his machine.
 warning is a harmless pandas PerformanceWarning in tests/test_replay_phase6.py.) Committed and pushed
 to GitHub (jaiakashj121420004-stack/EURUSD-Lab, public -- data/, reports/, ledger, journal,
 label-validation answers stay git-ignored).
+
+
+## 2026-09-28 (later) — Phase 8 finished (HANDOFF.md §4 Step 1)
+
+Continuing from the 2026-09-28 audit (previous entry). Worked HANDOFF.md's ordered plan, Step 1
+(finish Phase 8), with Akash's answers to the two open questions:
+- Stays on Maven `standard_2step`, but wants the flexibility to try other programs too ->
+  `nylab run --maven-program <name>` (any `config/prop.yaml` `programs:` key; validated at
+  startup, exits with the list of known names if you typo one).
+- Confirmed the fee directly: **$23 per $5,000 attempt** -> `config/prop.yaml`'s `standard_2step.fee_usd`
+  (his own stated number, not re-scraped from the site).
+- No preference on PNG-per-trade vs links-only for 8.1 -> kept the lighter option (links only,
+  gallery keeps its PNGs) to avoid bloating the report folder with ~640 images.
+
+**8.1** (`nylab/report/trades_page.py`, new): every backtest trade (not just the 30-trade gallery)
+now gets an "open in replay" link, on its own `trades.html` page next to `report.html` (day, side,
+entry hour, R, reason, IS/OOS, link) -- linked from the gallery section. No new PNGs.
+
+**8.4** (`nylab/maven_sim.py`, `nylab/report/maven_section.py` new, `nylab/config.py`,
+`config/models/london_sweep_reversal.yaml`): `simulate_challenge`/`sweep_risk_grid` now take
+`trades_per_day` (from the model's own YAML via `ModelConfig.max_trades_per_day`, default 1) instead
+of assuming one trade per simulated day in a comment -- `trades_per_day=1` reproduces the exact old
+numbers bit-for-bit (verified: `tests/test_maven_sim.py` still passes unchanged), so this doesn't
+change any existing result, only removes an unstated assumption for a future multi-trade-per-day
+model. Report section 13 and a `maven` block in `summary.json` now show, per risk level: P(pass all
+phases), P(pass each phase), median days to pass, expected attempts, and expected $ cost (once
+`fee_usd` is on file, as it now is for `standard_2step`). Plain-English caveat in both the report and
+this note: a high pass probability is NOT evidence of an edge by itself -- it only says how much of a
+pass/fail would be luck if the model's own OOS trades kept repeating; section 4's OOS verdict is the
+one that actually says whether there's an edge.
+
+**Verification:** all 299 tests pass on both pandas 2.3.3 (py3.10.12) and pandas 3.0.6 / numpy 2.5.3
+(py3.12.14, sandbox-built venv at `~/v3`) -- run in the same batches as the 2026-09-28 audit, plus the
+slow `tests/test_models_silver_bullet_fvg.py` separately (~100s each pandas end). `python -m nylab run`
+end to end on `tests/fixtures/EURUSD_M5_synth_clean_5y.csv` (715 trades, no crash) and on the real
+5-year CSV with `--ledger-path` pointed at a **copy** of the ledger (real `research/ledger.csv` verified
+byte-identical before/after, still 126 lines) -- both produced `report.html` (section 13 present),
+`trades.html`, `maven_simulation.csv` and a `summary.json` with a populated `maven` block; real-data run
+took 60s (budget 90s). Also checked an invalid `--maven-program` name exits with the list of valid
+names before writing anything (no partial report/summary left behind).
+
+**Not yet done / needs Akash:**
+- **`run_tests.bat` on his laptop** -- this phase isn't "done" per CLAUDE.md §5a until he runs it and
+  pastes the last line. Not committed yet, pending that.
+- **Browser check (HANDOFF.md §4 step 1.3):** open `report.html`, click 2-3 gallery links (incl. one
+  entry after 17:00 NY if any exists in this run) AND a `trades.html` link, confirm the right day/time
+  opens in the replay trainer in a real browser (only ever checked with node so far).
+
+**Not started this session:** HANDOFF.md §4 Steps 2-5 (closing Phase 5, the Phase 7 hand-check helper,
+Phase 9, Phase 10) -- next up once Step 1 is confirmed and committed.

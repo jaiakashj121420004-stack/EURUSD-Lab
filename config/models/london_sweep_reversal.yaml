@@ -12,3 +12,8 @@ params:
   stop_buffer_pips: 1.0
   rr: 2.0
   time_exit: 12.0
+
+# ROADMAP 8.4 audit fix (2026-09-28): explicit, not assumed -- this model fires at most once per
+# trading day (nylab.backtest.run_backtest's one_trade_per_day=True), so the Maven pass simulator
+# (nylab/maven_sim.py) reads this instead of hardcoding "1" in a comment.
+max_trades_per_day: 1

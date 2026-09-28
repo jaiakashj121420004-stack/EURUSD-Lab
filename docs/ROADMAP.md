@@ -416,23 +416,35 @@ Spec: FEATURES_SPEC.
 timeout -- not a flakiness concern, just wall-clock). User hand-verification of FVGs/sweeps in replay
 review mode is still open (see disclosed simplifications above).
 
-## Phase 8 — Verification, robustness, prop simulation (2 days) -- IN PROGRESS, code NOT yet committed
-(Status per the 2026-09-28 audit. All Phase 8 code is uncommitted in the working tree.)
-- [~] 8.1 Trade snapshots (PNG) + "open in replay" link -- built (`nylab/report/snapshot.py`,
-      `deeplink.py`, app.js `?date=&until=` boot) but only for the 30 GALLERY trades, not "every backtest
-      trade" as written. Audit fixed: `nylab run` crashed here (KeyError `entry_time_h`); links for
-      pre-midnight (Asia) entries opened the wrong trading day.
+## Phase 8 — Verification, robustness, prop simulation (2 days) -- DONE pending Akash's browser check
+(Status per the 2026-09-28 finish-up. Code committed; sandbox-tested on both pandas ends and via
+`nylab run` end to end; still needs Akash's `run_tests.bat` + a real-browser gallery-link click.)
+- [x] 8.1 "Open in replay" link for EVERY backtest trade, not just the gallery. The 30-trade gallery
+      (`nylab/report/snapshot.py`, `deeplink.py`) keeps its PNG snapshots; a new, lighter `trades.html`
+      (`nylab/report/trades_page.py`, no PNGs -- Akash had no preference on this, and PNGs for ~640
+      trades would bloat the report folder) lists every trade with its own replay link, linked from the
+      gallery section ("Open in replay -- every backtest trade (N)"). Earlier audit fixes (KeyError
+      `entry_time_h`; pre-midnight/Asia links opening the wrong day) already covered both pages.
 - [x] 8.2 Report gallery: 20 random OOS trades, 5 best, 5 worst (`nylab/report/gallery_section.py`, OOS only).
 - [x] 8.3 Robustness battery (RESEARCH_PROTOCOL §5.4) (`nylab/robustness.py`, report section 12). Audit
       fixed: the entry-delay check booked fake WINS when the delayed entry was already past the stop
       (43 such trades on real data).
-- [~] 8.4 **Maven pass simulator:** OOS R distribution through every phase of the program in
-      `config/prop.yaml` (default standard_2step = +8% then +5%, 4% daily / 8% overall static, 3 profitable
-      days ≥ 0.5% per phase -- the old "+10% / +8%" wording here was stale), for risk 0.25–1.5%.
-      Built (`nylab/maven_sim.py`, writes `maven_simulation.csv`). Still missing: not shown in report.html
-      or summary.json; no fee column by default (per-attempt fee not verified in prop.yaml).
-**Accept:** user can open report.html offline, click any trade, see it in replay. -- Holds for gallery
-trades only; not yet confirmed by Akash on his own machine.
+- [x] 8.4 **Maven pass simulator:** OOS R distribution through every phase of the program in
+      `config/prop.yaml` (Akash confirmed 2026-09-28: stays on `standard_2step` = +8% then +5%, 4% daily /
+      8% overall static, 3 profitable days ≥ 0.5% per phase, but wants the flexibility to try other
+      programs -- `nylab run --maven-program <name>` now picks any `config/prop.yaml` key). Akash also
+      confirmed the fee: **$23 per $5,000 attempt** on this program, now `fee_usd` in prop.yaml
+      (verified from him directly, not scraped). `nylab/maven_sim.py` now takes `trades_per_day` (read
+      from the model's own YAML, `max_trades_per_day`, default 1 -- was an unstated assumption in a
+      comment) instead of hardcoding one trade per simulated day. Report section 13
+      (`nylab/report/maven_section.py`) and a `maven` block in summary.json both show, per risk level:
+      P(pass all phases), P(pass each phase), median days to pass, expected attempts, and expected $
+      cost (once a fee is on file). Plain-English framing throughout: a high pass probability does NOT
+      by itself mean the model has an edge -- section 4's own OOS verdict is what says that.
+**Accept:** user can open report.html offline, click any trade (gallery OR the full trades.html list),
+see it in replay. -- Still needs Akash to click 2-3 links in his own browser (HANDOFF.md §4 step 1.3,
+the 2026-09-28 app.js deep-link fix was only checked with node, never in a real browser) and to run
+`run_tests.bat` before this phase is considered fully closed.
 
 ## Phase 9 — Daily automation (1–2 days)
 - [ ] 9.1 Incremental bar export. 9.2 `run_daily.bat` + Windows Task Scheduler guide (after 17:30 NY).

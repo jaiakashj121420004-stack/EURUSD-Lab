@@ -71,14 +71,22 @@ def build_figs(df: pd.DataFrame, trades: pd.DataFrame, split_date, n_random: int
 
 def build(trades: pd.DataFrame, split_date, figs: dict, n_random: int = 20, n_best: int = 5,
           n_worst: int = 5, seed: Optional[int] = None, replay_host: str = "127.0.0.1",
-          replay_port: int = 8765) -> str:
+          replay_port: int = 8765, all_trades_href: Optional[str] = None) -> str:
     """Returns the HTML fragment for report.html's trade gallery section. `figs` must already
-    contain this same selection's snapshots (see build_figs above)."""
+    contain this same selection's snapshots (see build_figs above).
+
+    `all_trades_href` (ROADMAP 8.1 audit fix, 2026-09-28): "every backtest trade" needs an
+    open-in-replay link, not just this gallery's 30 -- pass the relative path to the separate
+    nylab.report.trades_page page (e.g. "trades.html") to link to it here; omitted, no link is
+    shown (keeps this module usable standalone / in tests without that page existing)."""
     selection = select_gallery_trades(trades, split_date, n_random, n_best, n_worst, seed)
     h = ["<h2>11 · Trade gallery (out-of-sample)</h2>",
          "<p class='muted'>Every chart below is out-of-sample -- trades the model/parameters were never "
          "chosen to fit. Click a trade's replay link to see the exact bars in the replay trainer "
          "(REPLAY_TRAINER.md) and confirm the rule did what this snapshot suggests it did.</p>"]
+    if all_trades_href:
+        h.append(f"<p><a href='{all_trades_href}'>Open in replay ↗ -- every backtest trade "
+                 f"({len(trades)}), not just the gallery below</a></p>")
     for title, key in (("Random sample", "random"), ("Best", "best"), ("Worst", "worst")):
         group = selection[key]
         h.append(f"<h3>{title} ({len(group)})</h3>")
