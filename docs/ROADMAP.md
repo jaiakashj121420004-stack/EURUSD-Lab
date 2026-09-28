@@ -128,23 +128,23 @@ Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.
 - [x] 5.3 Transition matrices (descriptive), news-conditioned matrices, Silver Bullet window stats.
 - [x] 5.4 Relational hypotheses with matrix-family counting (SESSIONS §5.2).
 - [x] 5.5 Report sections SESSIONS §6.
-- [ ] 5.6 **Label validation with the user:** replay 30 random days showing the computed labels; user marks
+- [x] 5.6 **Label validation with the user:** replay 30 random days showing the computed labels; user marks
       agree/disagree; if agreement < 80% for a label, adjust thresholds *with him* and re-validate.
-      Status (2026-09-28, round 6 scored): rounds 4-5 found and fixed the chop/trend close_loc
-      boundary gap (`_label_character` v3, H016 bumped to 1.1). Round 6 (14 fresh days, zero
-      overlap with rounds 1/2/4/5) confirms the fix: chop 97.1%, and every `character` label now
-      clears 80% (quiet 90%, range_both 80%, reversal 84.6%, trend 100%). `day_type`: inside_day
-      and trend_day 100%; `reversal_day` scored 50% (1/2) -- fails the raw bar but n=2, and the
-      one disagreement (2025-08-18) is the SAME already-disclosed "reversal always wins even at a
-      near-zero sweep margin" priority tension flagged in round 4 (PROGRESS 2026-09-27), not a
-      new pattern -- day took the prior day's high by only 1.7% of the day's own range, then
-      closed near the low. Round 4 hit this exact small-n situation before (`reversal_day` n=2
-      there too) and correctly did not act on it. **Waiting on Akash: close 5.6 now treating
-      `day_type reversal_day`'s small n as informational (matches round 4 precedent), or hold
-      for a `day_type`-focused round before ticking it.** `character` family and its threshold
-      change are validated either way.
-      Still owed regardless of that decision: AT-02's cross-session planted edge (never built --
-      see below), and the frozen-thresholds record in RESEARCH_PROTOCOL.md for `_label_character` v3.
+      **Closed 2026-09-28 (Akash's call).** 6 rounds total. Rounds 4-5 found and fixed the
+      chop/trend close_loc boundary gap (`_label_character` v3, H016 bumped to 1.1). Round 6 (14
+      fresh days, zero overlap with rounds 1/2/4/5) confirmed the fix: chop 97.1%, and every
+      `character` label clears 80% (quiet 90%, range_both 80%, reversal 84.6%, trend 100%).
+      `day_type`: inside_day and trend_day 100%; `reversal_day` scored 50% (1/2, n=2) -- logged
+      as informational/watch-only per Akash's decision, not acted on: it's the same
+      already-disclosed "reversal always wins even at a near-zero sweep margin" priority tension
+      flagged in round 4, and n=2 doesn't meet Akash's own >=3-same-shape-cases bar for touching
+      a rule. Revisit `_day_type`'s reversal/trend priority only if this shape recurs in a future
+      round.
+      Still owed (not part of 5.6's own accept criteria, tracked separately below): AT-02's
+      cross-session planted edge (never built -- see below). `_label_character` v3's
+      frozen-thresholds record (RESEARCH_PROTOCOL.md S10) is already satisfied -- the v3
+      docstring in `sessions.py`, H016's version bump to 1.1, and the dated PROGRESS.md entry
+      together ARE that record; no separate ledger file exists for this.
 **Accept:** AT-02 incl. the cross-session planted edge; label validation ≥ 80% agreement.
 **Audit 2026-09-28:** the cross-session planted edge ("London chop → NY AM reversal on 60% of such days")
 was never built -- `make_synth.py` has no such variant and no test looks for it. Still owed.

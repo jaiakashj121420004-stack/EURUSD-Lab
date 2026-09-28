@@ -1696,3 +1696,11 @@ risks the opposite mistake (mislabeling real reversal days as trend).
 **No code change proposed or made for this.** Docs updated; 5.6 left unticked pending Akash's
 call on how to close it out (see ROADMAP.md 5.6). `character` v3 itself is fully validated and
 does not need to wait on this.
+
+**Akash's call (2026-09-28): close 5.6 now.** Given `character`'s threshold change is fully
+validated (every label >=80% on a doubly-fresh sample) and `day_type reversal_day`'s 50% is a
+single small-n (n=2) instance of an already-known priority tension, not a new pattern, ROADMAP
+5.6 is ticked done. `_day_type`'s reversal-overrides-trend priority stays as-is; revisit only if
+this shape shows up again in a future round. Remaining Phase 5 work (HANDOFF.md S4 Step 2): the
+AT-02 cross-session planted-edge test (never built) and the BH-vs-Bonferroni `m` decision are
+still open -- moving to those next.
