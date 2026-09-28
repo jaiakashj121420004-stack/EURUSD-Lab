@@ -148,8 +148,11 @@ def evaluate(d: pd.DataFrame, hyps: list, split_date, run_id: str,
     pvals = [r["p"] for r in raw]
     # Audit fix 2026-09-28: global BH also counts a matrix promotion as its whole matrix
     # (RESEARCH_PROTOCOL S10), same padding-with-p=1.0 idea as the per-family BH below.
-    # (A stricter option -- padding to the full ledger `m`, like Bonferroni -- is left for
-    # Akash to decide; see docs/PROGRESS.md 2026-09-28.)
+    # Decided 2026-09-28 (Akash's call, docs/PROGRESS.md): BH stays scoped to THIS run's own
+    # hypotheses, not padded to the full ledger `m` the way Bonferroni is -- padding it out
+    # would make BH converge toward Bonferroni's own strictness as the ledger grows, defeating
+    # the reason it exists here (a lighter, per-run triage tier separate from the strict
+    # lifetime bar that backs `survives-oos`).
     n_tests_this_run = sum(int(cells_by_id[(r["id"], r["version"])] or 1) for r in raw)
     padded = pvals + [1.0] * max(0, n_tests_this_run - len(pvals))
     bh_sig_all = ledger_mod.bh_significant(padded, q=bh_q)[: len(pvals)]

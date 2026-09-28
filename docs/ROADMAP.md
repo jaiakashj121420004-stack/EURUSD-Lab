@@ -145,9 +145,21 @@ Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.
       frozen-thresholds record (RESEARCH_PROTOCOL.md S10) is already satisfied -- the v3
       docstring in `sessions.py`, H016's version bump to 1.1, and the dated PROGRESS.md entry
       together ARE that record; no separate ledger file exists for this.
-**Accept:** AT-02 incl. the cross-session planted edge; label validation ≥ 80% agreement.
-**Audit 2026-09-28:** the cross-session planted edge ("London chop → NY AM reversal on 60% of such days")
-was never built -- `make_synth.py` has no such variant and no test looks for it. Still owed.
+**Accept:** AT-02 incl. the cross-session planted edge; label validation ≥ 80% agreement. **Both
+now done (2026-09-28).** `make_synth.py`'s `plant_cross_session_edge()` forces H016's own
+condition/outcome ("London chop -> NY AM reversal") on 60% of naturally lon-chop days, using
+nylab.sessions' real character logic to find the condition days (not a reimplementation) and
+touching only the 2 bars per day that decide the outcome. `tests/test_hyp_engine_at.py`'s new
+`test_at02b_cross_session_planted_edge_is_found` confirms H016 reaches `survives-oos`
+(hit=0.599, oos_hit=0.527) on the regenerated fixture; AT-01 and H005's own AT-02 are unaffected.
+Label validation closed per ROADMAP 5.6 above.
+
+**BH-vs-Bonferroni scope decision (2026-09-28, Akash's call -- see PROGRESS.md):** global BH
+stays scoped to the current run's own hypotheses (unchanged), NOT padded out to the full ledger
+`m` Bonferroni uses. No code change -- this closes HANDOFF S4 Step 2's 3rd item as "keep as is,
+now an explicit decision instead of an open question."
+
+**Phase 5 accept criteria are now fully met.**
 
 ## Phase 5.7 — Statistics integrity (added 2026-09-26, do BEFORE any new research)
 Why: a review on 2026-09-26 re-ran H013/H014 on real data and found both of the lab's only

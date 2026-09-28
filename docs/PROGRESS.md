@@ -1704,3 +1704,45 @@ single small-n (n=2) instance of an already-known priority tension, not a new pa
 this shape shows up again in a future round. Remaining Phase 5 work (HANDOFF.md S4 Step 2): the
 AT-02 cross-session planted-edge test (never built) and the BH-vs-Bonferroni `m` decision are
 still open -- moving to those next.
+
+## 2026-09-28 (Step 2 finished) — AT-02 cross-session edge built; BH scope decided; Phase 5 closed
+
+**AT-02's second planted edge, built and passing.** `tests/fixtures/make_synth.py` gained
+`plant_cross_session_edge()`: on 60% of days where `lon`'s session character is naturally
+'chop' (found using nylab.sessions' own real character-labeling function, not a
+reimplementation, so the planted condition is exactly what the pipeline measures), it forces
+`nyam_kz` to sweep London's high and then close near its own low -- character 'reversal'. Only
+2 bars per affected day are touched; days plant_edge() (H005) already forced are excluded so the
+two edges never fight over the same bars (their windows overlap at 09:30-10:00 NY).
+
+New `test_at02b_cross_session_planted_edge_is_found` (`tests/test_hyp_engine_at.py`): H016
+reaches `survives-oos` on the regenerated fixture -- hit=0.599, oos_hit=0.527, p=5e-8. AT-01
+(clean fixture, still finds nothing) and H005's own AT-02 (hit=0.677, unaffected) both still
+pass. 2 new sanity tests in `tests/test_synth_fixtures.py` confirm the edge measurably shifts
+the lon-chop -> nyam_kz-reversal rate and that the two planted edges never touch the same day.
+
+**300 tests pass on both pandas 2.3.3 and 3.0.6** (sandbox, batched runs). `python -m nylab run`
+completes end to end on the real 5-year CSV with a copied `--ledger-path` (real
+`research/ledger.csv` verified byte-identical before/after, still 142 lines).
+
+**BH-vs-Bonferroni scope: Akash's decision.** Explained in plain English: Bonferroni's `m`
+counts every hypothesis ever tested across the whole project's history (the ledger file, which
+only grows), so it gets stricter over time, by design -- that strictness is what backs the
+`survives-oos` verdict. Global BH currently counts only the hypotheses tested in THIS run, so it
+stays equally easy to pass today as a year from now. Asked Akash to pick; he asked for whichever
+is most robust and correct. Recommendation given and going with it: **keep BH scoped to the
+current run.** Padding BH out to the full historical `m` would make it converge toward
+Bonferroni's own strictness as the ledger grows, which defeats the actual reason BH exists here
+-- a lighter-weight "is anything worth a second look" triage tier, separate from the strict
+lifetime bar. Bonferroni-on-IS (unchanged, already strict and growing) remains the only path to
+`survives-oos`; BH keeps `candidate` a genuinely reachable label over the life of the project.
+**No code change** -- `nylab/hyp_engine.py` already works this way; this turns an open question
+into a documented decision (RESEARCH_PROTOCOL.md S4's BH description already matches this; only
+the still-open comment in `hyp_engine.py`'s per-run BH block needed to stop calling it
+undecided).
+
+**HANDOFF.md S4 Step 2 is done: all three items closed** (cross-session planted edge built,
+5.6 label validation closed, BH scope decided). **Phase 5 is fully complete.**
+
+Next: HANDOFF.md S4 Step 3 (Phase 7 hand-check helper -- 10 random FVGs + 10 random sweeps with
+replay deep links, for Akash's manual verification).
