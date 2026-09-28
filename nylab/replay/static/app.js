@@ -355,16 +355,23 @@ async function stepBars(nBars) {
 
 $("#stepFwd").onclick = () => stepBars(1);
 $("#stepHour").onclick = () => stepBars(12); // 12 M5 bars = 1 hour, resample handles coarser TFs
-$("#jumpBtn").onclick = () => {
-  const t = $("#jumpTime").value; // HH:MM
-  if (!t) return;
-  const [hh, mm] = t.split(":").map(Number);
-  const d = new Date(state.currentTd + "T00:00:00");
-  d.setHours(hh, mm, 0, 0);
-  const pad = (n) => String(n).padStart(2, "0");
-  state.until = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(hh)}:${pad(mm)}:00`;
-  refreshBars(); refreshLevels(); refreshNews(); updateClockLabel(); updateReviewButtonState();
-};
+// ROADMAP 8.1: factored out of the #jumpBtn click handler so the deep-link boot code (see
+// init() below) can reuse the exact same "jump to HH:MM on the currently loaded day" logic
+// instead of a second copy of this date-arithmetic.
+// Audit fix 2026-09-28: a trading day runs 17:00 -> 17:00 NY, so a time at/after 17:00 means
+// the EVENING BEFORE the trading day's date (Asia / CBDR), i.e. h = HH:MM - 24. Previously
+// 20:00 was placed on the trading day's own date, i.e. after the day had already ended.
+function jumpToTime(hhmm) {
+  if (!hhmm) return;
+  const [hh, mm] = hhmm.split(":").map(Number);
+  let h = hh + mm / 60;
+  if (h >= 17) h -= 24;
+  state.until = tdPlusHours(state.currentTd, h);
+  return Promise.all([refreshBars(), refreshLevels(), refreshNews()]).then(() => {
+    updateClockLabel(); updateReviewButtonState();
+  });
+}
+$("#jumpBtn").onclick = () => jumpToTime($("#jumpTime").value);
 
 $("#playPause").onclick = () => {
   state.playing = !state.playing;
@@ -920,5 +927,25 @@ $("#statsClose").onclick = () => $("#statsPanel").classList.remove("open");
   await loadDayList();
   await loadPresetList();
   await refreshAccountPanel();
-  if (state.filteredDays.length) await loadDay(state.filteredDays[Math.floor(state.filteredDays.length / 2)].date);
+  // ROADMAP 8.1 "open in replay" deep link: ?date=YYYY-MM-DD&until=HH:MM (nylab.report.deeplink
+  // .replay_url() builds this exact URL from a trades DataFrame row). `date` need not be one of
+  // state.filteredDays (a report's trade gallery can link to a day the current filter set
+  // excludes) -- loadDay() fetches it directly from the API regardless of the filtered list.
+  const deepLinkParams = new URLSearchParams(window.location.search);
+  const deepDate = deepLinkParams.get("date");
+  const deepUntil = deepLinkParams.get("until");
+  if (deepDate) {
+    // `date` is the CALENDAR date of the moment (nylab.report.deeplink.replay_url). A time at or
+    // after 17:00 NY belongs to the NEXT trading day (audit fix 2026-09-28 -- before this, a
+    // pre-midnight Asia-session trade opened the previous trading day instead).
+    let deepTd = deepDate;
+    if (deepUntil && Number(deepUntil.split(":")[0]) >= 17) {
+      const nd = new Date(Date.UTC(...deepDate.split("-").map((x, i) => Number(x) - (i === 1 ? 1 : 0))) + 86400000);
+      deepTd = nd.toISOString().slice(0, 10);
+    }
+    await loadDay(deepTd);
+    if (deepUntil) await jumpToTime(deepUntil);
+  } else if (state.filteredDays.length) {
+    await loadDay(state.filteredDays[Math.floor(state.filteredDays.length / 2)].date);
+  }
 })();

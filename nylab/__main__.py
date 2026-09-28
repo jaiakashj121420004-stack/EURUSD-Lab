@@ -24,8 +24,14 @@ from nylab import ledger as ledger_mod
 from nylab import stats as stats_mod
 from nylab.data import loader, quality, timezones
 from nylab.models import london_sweep_reversal as lsr
+from nylab.models.london_sweep_reversal import LondonSweepReversalModel
+from nylab import maven_sim as maven_sim_mod
+from nylab import robustness as robustness_mod
 from nylab.report import charts as charts_mod
+from nylab.report import deeplink as deeplink_mod
+from nylab.report import gallery_section as gallery_section_mod
 from nylab.report import html as html_mod
+from nylab.report import robustness_section as robustness_section_mod
 from nylab.report import sessions_section as sessions_section_mod
 from nylab.report import summary as summary_mod
 from nylab.replay import server as replay_server
@@ -104,20 +110,42 @@ def cmd_run(args):
 
     model_params = dict(model_cfg.params)
     model_params["default_cost_pips"] = costs.default_cost_pips
+    model_params["pip"] = windows["pip"]
     trades = lsr.backtest(df, d, windows["pip"], model_params)
     st_all = stats_mod.r_stats(trades.R_net) if len(trades) else {"n": 0}
     st_is = stats_mod.r_stats(trades[trades.td < split_date].R_net) if len(trades) else {"n": 0}
     st_oos = stats_mod.r_stats(trades[trades.td >= split_date].R_net) if len(trades) else {"n": 0}
+
+    # ROADMAP 8.3: the robustness battery needs an ARCHITECTURE.md S4 Model plugin (it re-runs
+    # the backtest with a cost/entry-delay stress), so it runs against LondonSweepReversalModel
+    # -- proven trade-for-trade identical to `trades` above (tests/test_models_london_sweep_
+    # reversal.py) -- rather than the frozen ad hoc lsr.backtest() function itself.
+    robustness_result = None
+    if st_all.get("n", 0):
+        print("  running robustness battery (10,000 Monte Carlo shuffles)...")
+        robustness_result = robustness_mod.run_robustness_battery(
+            lambda: LondonSweepReversalModel(dict(model_params)), df, d, windows["pip"],
+            costs.default_cost_pips, n_shuffles=10_000, seed=42)
 
     out_dir = args.out or os.path.join("reports", run_id)
     os.makedirs(out_dir, exist_ok=True)
 
     figs = charts_mod.build(df, d, trades, split_date, windows["pip"])
     figs.update(sessions_section_mod.build_figs(df, windows["pip"]))
+    if len(trades):
+        figs.update(gallery_section_mod.build_figs(df, trades, split_date, seed=42))
     meta = dict(file=os.path.basename(args.csv), first=f"{d.index[0]:%Y-%m-%d}", last=f"{d.index[-1]:%Y-%m-%d}",
                 tz=mode, bar=bar, split=f"{split_date:%Y-%m-%d}", n_days=len(d))
 
     extra_section = sessions_section_mod.build(df, d, session_tables, sessions_cfg, cal, H, windows["pip"], figs)
+    if len(trades):
+        # ROADMAP 8.1/8.2: replay deep links point at whatever host/port the user will actually
+        # launch `nylab replay` on -- args.replay_host/--replay_port default to the same
+        # 127.0.0.1:8765 the replay CLI subcommand itself defaults to.
+        extra_section += gallery_section_mod.build(trades, split_date, figs, seed=42,
+                                                     replay_host=args.replay_host, replay_port=args.replay_port)
+    if robustness_result is not None:
+        extra_section += robustness_section_mod.build(robustness_result)
     report_html = html_mod.build(meta, d, H, m, trades, st_all, st_is, st_oos, figs, windows["pip"], model_params,
                                   extra_section=extra_section)
     with open(os.path.join(out_dir, "report.html"), "w", encoding="utf-8") as f:
@@ -125,6 +153,22 @@ def cmd_run(args):
     d.to_csv(os.path.join(out_dir, "days.csv"))
     trades.to_csv(os.path.join(out_dir, "trades.csv"), index=False)
     H.to_csv(os.path.join(out_dir, "hypotheses.csv"), index=False)
+
+    # ROADMAP 8.4: the Maven pass simulator. RESEARCH_PROTOCOL.md S5 item 5's own minimum-
+    # evidence bar (OOS >= 30 trades, "not proven" below that) gates this too -- bootstrapping a
+    # challenge simulation from fewer than 30 OOS trades would just be simulating noise.
+    oos_r = trades[trades.td >= split_date].R_net.to_numpy() if len(trades) else []
+    if len(oos_r) >= 30:
+        prop_cfg = cfg.load_prop()
+        program_name = prop_cfg["default_program"]
+        program = prop_cfg["programs"][program_name]
+        size = prop_cfg.get("akash_account_size") or program["sizes"][0]
+        print(f"  running Maven pass simulation ({program_name}, ${size:,.0f}, 5,000 sims x 6 risk levels)...")
+        maven_df = maven_sim_mod.sweep_risk_grid(oos_r, program, size, n_sims=5_000, seed=42)
+        maven_df.to_csv(os.path.join(out_dir, "maven_simulation.csv"), index=False)
+    else:
+        print(f"  skipping Maven pass simulation -- only {len(oos_r)} OOS trades "
+              "(RESEARCH_PROTOCOL.md S5: need >= 30 for 'not proven', >= 100 preferred).")
 
     model_stats = None
     if st_all.get("n"):
@@ -263,6 +307,11 @@ def main():
     p_run.add_argument("--no-cache", dest="no_cache", action="store_true")
     p_run.add_argument("--ledger-path", dest="ledger_path", default="research/ledger.csv",
                         help="append-only multiple-testing ledger (RESEARCH_PROTOCOL.md S4)")
+    p_run.add_argument("--replay-host", dest="replay_host", default="127.0.0.1",
+                        help="host used to build report.html's 'open in replay' links (ROADMAP 8.1)")
+    p_run.add_argument("--replay-port", dest="replay_port", type=int, default=8765,
+                        help="port used to build report.html's 'open in replay' links -- must match "
+                             "whatever port you launch `nylab replay` on")
     p_run.add_argument("--calendar", default="data/calendar.parquet",
                         help="calendar cache from `nylab calendar-import` (ROADMAP Phase 4); "
                              "silently skipped if the file doesn't exist")

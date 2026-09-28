@@ -24,9 +24,13 @@ from nylab import config as cfg
 from nylab.replay import api, journal_stats, sim
 
 STATIC_DIR = Path(__file__).parent / "static"
-JOURNAL_CSV = Path("research/replay/trades.csv")
-SHOTS_DIR = Path("research/replay/shots")
-PRESETS_JSON = Path("research/replay/presets.json")
+# Audit fix 2026-09-28: overridable so the test suite writes into a throwaway folder. Before
+# this, tests/test_replay_server_integration.py appended a fake "test trade" row to Akash's REAL
+# practice journal on every test run (12 such rows were found and removed on 2026-09-28).
+REPLAY_DATA_DIR = Path(os.environ.get("NYLAB_REPLAY_DATA_DIR", "research/replay"))
+JOURNAL_CSV = REPLAY_DATA_DIR / "trades.csv"
+SHOTS_DIR = REPLAY_DATA_DIR / "shots"
+PRESETS_JSON = REPLAY_DATA_DIR / "presets.json"
 JOURNAL_COLUMNS = [
     "logged_at", "td", "side", "entry", "sl", "tp", "exit", "reason",
     "risk_pips", "R_gross", "R_net", "setup_tag", "rules_followed", "emotion", "notes",

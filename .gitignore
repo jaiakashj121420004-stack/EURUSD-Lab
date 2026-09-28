@@ -27,3 +27,9 @@ ny_lab_report/
 
 # Compiled MQL5 (Akash's MetaEditor build output, regenerated from the .mq5 source)
 mql5/*.ex5
+
+# Personal / one-off files kept out of the (public) GitHub repo -- added 2026-09-28
+research/label_validation_answers*.json
+research/replay/trades_BACKUP*.csv
+report_preview_*.html
+.env

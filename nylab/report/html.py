@@ -80,6 +80,12 @@ tr:nth-child(even) td{background:rgba(var(--accent-rgb),.04)}
 .warn{border-color:var(--bear)} .info{border-color:var(--accent)} .good{border-color:var(--bull)}
 .y{color:var(--bull);font-weight:700} .n{color:var(--text-3)}
 .muted{color:var(--text-2);font-size:13px}
+/* ROADMAP 8.2: trade gallery grid -- reuses the existing .box/panel tokens, no new colors. */
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;margin:10px 0}
+.gallery-card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px}
+.gallery-imgs img{width:100%;border-radius:4px}
+.gallery-meta{font-size:12px;color:var(--text-2);margin-top:6px}
+.gallery-meta a{color:var(--accent)}
 img{max-width:100%;border:1px solid var(--border);border-radius:8px;margin:8px 0;background:var(--panel)}
 img.chart-dark{display:none}
 :root[data-theme="dark"] img.chart-light{display:none}

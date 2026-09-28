@@ -1433,3 +1433,60 @@ random-walk-shaped data with no real edge to find).
 **Not yet done**: the Accept line's "user hand-verifies 10 FVGs + 10 sweeps in replay review
 mode" is a manual step only Akash can perform in the replay UI — everything else in Phase 7's
 accept criteria (AT-01..04, truncation tests for every new feature) is done and passing.
+
+
+## 2026-09-28 — independent audit of everything built so far (Phases 0–8), verified on disk
+
+Why: a previous session (working from a stale copy outside C:\Trading) reported Phase 5.7 half
+done and Phases 7–10 not started. Checked against the real folder + git history instead.
+
+**Actual state (from `git log` + the code itself):** Phases 0–4 done. Phase 5.1–5.5 done; **5.6 label
+validation still open** (round 4: chop 73.3% < 80%, threshold fix waiting on Akash). **Phase 5.7 fully
+done** (commits 63fcc2c..f2eb83b, confirmed 176/176 on Akash's laptop). 5.8 done. **Phase 6 done**
+(93720ef). **Phase 7 done** (891950c) except Akash's hand-check of 10 FVGs + 10 sweeps. **Phase 8 is
+~75% built but uncommitted** (maven_sim, robustness, snapshot/gallery/deeplink + tests). Phases 9–10
+not started.
+
+**Tests:** 299/299 pass on BOTH pandas 2.3.3 (py3.10) and pandas 3.0.6 / numpy 2.5.3 (py3.12 -- the
+exact versions on Akash's laptop), incl. 4 new regression tests (`tests/test_audit_20260928.py`).
+Real 5-year `nylab run`: 43–45 s (AT-04 budget 90 s).
+
+**Bugs found and fixed:**
+1. `python -m nylab run` CRASHED (KeyError `entry_time_h`) -- the Phase 8 gallery expected the new
+   engine's trade shape but `cmd_run` passes the v0 backtest's trades (`entry_time_ny` only). The unit
+   tests only used new-engine-shaped trades, so they passed. Fix: `snapshot.entry_hour()` reads either.
+2. Robustness "entry delayed 1 bar" booked FAKE WINS: when the delay bar had already closed past the
+   original stop, the delayed "entry" was taken there and the next bar's stop "hit" (on the profitable
+   side of that entry) was booked as a win. 41 trades on the clean fixture, 43 on real data. Fix: such
+   setups are skipped and counted (shown in report section 12).
+3. **Statistics integrity:** the per-family BH correction ran over only the family members loaded as
+   YAML, so H016 (1 promoted cell of a 36-cell 6x6 matrix) got NO correction and was labelled
+   `candidate` at p = 0.098 in the 2026-09-27 real-data reports and ledger rows. RESEARCH_PROTOCOL §10
+   says the whole matrix counts. Fix: BH (family and global) pads the unpromoted cells as p = 1.0.
+   H016 is now correctly `weak`. The old ledger rows stay (append-only); the next run appends the
+   corrected verdict. **Decision for Akash:** global BH still runs over this run's tests (+ matrix
+   cells), not the full ledger `m` that Bonferroni uses -- the stricter option is available if wanted.
+4. Replay deep links for entries at/after 17:00 NY (pre-midnight, Asia) opened the PREVIOUS trading
+   day; the manual jump-to-time box had the same problem for 17:00–23:59. Fix in app.js (17:00+ now
+   means the evening before the trading day's date).
+5. `tests/test_replay_server_integration.py` wrote a fake "test trade" row into the REAL
+   `research/replay/trades.csv` on every test run -- all 12 rows in Akash's journal were these. Fix:
+   server paths overridable via `NYLAB_REPLAY_DATA_DIR`, test uses a temp dir. The 12 rows were
+   removed (original kept as `research/replay/trades_BACKUP_before_test_rows_removed_20260928.csv`).
+6. `maven_sim` column `median_attempts_to_pass` was really the MEAN (1/p) -- renamed
+   `expected_attempts_to_pass`.
+Also: report section 12's per-year check now says plainly it isn't meaningful when total R ≤ 0.
+
+**Checked and found OK:** replay no-leak (bars/levels/news all gated on `until`; clock label is the
+last revealed bar's OPEN time, i.e. conservative, not a leak); maven_sim drawdown maths vs prop.yaml;
+Monte Carlo shuffle; cost stress; real-data verdicts (15 noise + H016 weak; london_sweep_reversal
+`negative`, OOS n=183, CI −0.42 to −0.04).
+
+**Not verified this pass:** the new deep-link JS was checked for syntax and date maths (node), not
+in a real browser; Akash should click a gallery link once on his machine.
+
+**Confirmed on Akash's laptop 2026-09-28** (python 3.14.6, pandas 3.0.6, numpy 2.5.3):
+`run_tests.bat` → "299 passed, 1 warning in 249.85s", "All tests passed on this machine." (The one
+warning is a harmless pandas PerformanceWarning in tests/test_replay_phase6.py.) Committed and pushed
+to GitHub (jaiakashj121420004-stack/EURUSD-Lab, public -- data/, reports/, ledger, journal,
+label-validation answers stay git-ignored).

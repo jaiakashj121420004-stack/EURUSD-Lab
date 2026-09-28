@@ -4,6 +4,7 @@ API endpoints. Complements test_replay_api.py (which tests the no-leak logic dir
 proving the HTTP wiring itself works end to end, fully offline.
 """
 import json
+import os
 import subprocess
 import sys
 import time
@@ -18,14 +19,16 @@ CACHE_DIR = ROOT / "tests" / "fixtures" / "_replay_cache"
 
 
 @pytest.fixture(scope="module")
-def running_server():
+def running_server(tmp_path_factory):
     if not (CACHE_DIR / "bars_M5.parquet").exists():
         pytest.skip("run test_replay_api.py first to build the test cache")
+    # Never touch the real research/replay/ journal/presets/shots (audit fix 2026-09-28).
+    env = dict(os.environ, NYLAB_REPLAY_DATA_DIR=str(tmp_path_factory.mktemp("replay_data")))
 
     proc = subprocess.Popen(
         [sys.executable, "-u", "-m", "nylab", "replay", "--cache-dir", str(CACHE_DIR),
          "--port", "8790", "--no-browser"],
-        cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        cwd=str(ROOT), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env,
     )
     ok = False
     for _ in range(20):

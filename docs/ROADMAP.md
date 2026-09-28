@@ -130,7 +130,13 @@ Spec: SESSIONS_AND_CONTEXT §1–3, §5–6.
 - [x] 5.5 Report sections SESSIONS §6.
 - [ ] 5.6 **Label validation with the user:** replay 30 random days showing the computed labels; user marks
       agree/disagree; if agreement < 80% for a label, adjust thresholds *with him* and re-validate.
+      Status (audit 2026-09-28): 4 rounds done. Round 4: chop 22/30 = 73.3% (FAILS 80%), all other
+      labels pass. 5 same-shape "big range / extreme close but labelled chop" cases found -- a
+      threshold change needs a fresh-sample verification pass first (PROGRESS 2026-09-27 round 4).
+      **Waiting on Akash's go-ahead.**
 **Accept:** AT-02 incl. the cross-session planted edge; label validation ≥ 80% agreement.
+**Audit 2026-09-28:** the cross-session planted edge ("London chop → NY AM reversal on 60% of such days")
+was never built -- `make_synth.py` has no such variant and no test looks for it. Still owed.
 
 ## Phase 5.7 — Statistics integrity (added 2026-09-26, do BEFORE any new research)
 Why: a review on 2026-09-26 re-ran H013/H014 on real data and found both of the lab's only
@@ -410,14 +416,23 @@ Spec: FEATURES_SPEC.
 timeout -- not a flakiness concern, just wall-clock). User hand-verification of FVGs/sweeps in replay
 review mode is still open (see disclosed simplifications above).
 
-## Phase 8 — Verification, robustness, prop simulation (2 days)
-- [ ] 8.1 Trade snapshots (PNG) + "open in replay" link for every backtest trade.
-- [ ] 8.2 Report gallery: 20 random OOS trades, 5 best, 5 worst.
-- [ ] 8.3 Robustness battery (RESEARCH_PROTOCOL §5.4).
-- [ ] 8.4 **Maven pass simulator:** OOS R distribution through step 1 (+10%) and step 2 (+8%) with 4% daily /
-      8% overall static balance-based limits, for risk 0.25–1.5%, max trades/day from the model. Output P(pass
-      both), median trades/days, expected attempts × $23.
-**Accept:** user can open report.html offline, click any trade, see it in replay.
+## Phase 8 — Verification, robustness, prop simulation (2 days) -- IN PROGRESS, code NOT yet committed
+(Status per the 2026-09-28 audit. All Phase 8 code is uncommitted in the working tree.)
+- [~] 8.1 Trade snapshots (PNG) + "open in replay" link -- built (`nylab/report/snapshot.py`,
+      `deeplink.py`, app.js `?date=&until=` boot) but only for the 30 GALLERY trades, not "every backtest
+      trade" as written. Audit fixed: `nylab run` crashed here (KeyError `entry_time_h`); links for
+      pre-midnight (Asia) entries opened the wrong trading day.
+- [x] 8.2 Report gallery: 20 random OOS trades, 5 best, 5 worst (`nylab/report/gallery_section.py`, OOS only).
+- [x] 8.3 Robustness battery (RESEARCH_PROTOCOL §5.4) (`nylab/robustness.py`, report section 12). Audit
+      fixed: the entry-delay check booked fake WINS when the delayed entry was already past the stop
+      (43 such trades on real data).
+- [~] 8.4 **Maven pass simulator:** OOS R distribution through every phase of the program in
+      `config/prop.yaml` (default standard_2step = +8% then +5%, 4% daily / 8% overall static, 3 profitable
+      days ≥ 0.5% per phase -- the old "+10% / +8%" wording here was stale), for risk 0.25–1.5%.
+      Built (`nylab/maven_sim.py`, writes `maven_simulation.csv`). Still missing: not shown in report.html
+      or summary.json; no fee column by default (per-attempt fee not verified in prop.yaml).
+**Accept:** user can open report.html offline, click any trade, see it in replay. -- Holds for gallery
+trades only; not yet confirmed by Akash on his own machine.
 
 ## Phase 9 — Daily automation (1–2 days)
 - [ ] 9.1 Incremental bar export. 9.2 `run_daily.bat` + Windows Task Scheduler guide (after 17:30 NY).

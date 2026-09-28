@@ -146,14 +146,30 @@ def evaluate(d: pd.DataFrame, hyps: list, split_date, run_id: str,
         ))
 
     pvals = [r["p"] for r in raw]
-    bh_sig_all = ledger_mod.bh_significant(pvals, q=bh_q)
+    # Audit fix 2026-09-28: global BH also counts a matrix promotion as its whole matrix
+    # (RESEARCH_PROTOCOL S10), same padding-with-p=1.0 idea as the per-family BH below.
+    # (A stricter option -- padding to the full ledger `m`, like Bonferroni -- is left for
+    # Akash to decide; see docs/PROGRESS.md 2026-09-28.)
+    n_tests_this_run = sum(int(cells_by_id[(r["id"], r["version"])] or 1) for r in raw)
+    padded = pvals + [1.0] * max(0, n_tests_this_run - len(pvals))
+    bh_sig_all = ledger_mod.bh_significant(padded, q=bh_q)[: len(pvals)]
 
     # Per-family BH too (RESEARCH_PROTOCOL S10: "BH within the family + global Bonferroni").
     families = {r["family"] for r in raw if r["family"]}
     bh_sig_family = {}
     for fam in families:
         idx = [i for i, r in enumerate(raw) if r["family"] == fam]
-        fam_sig = ledger_mod.bh_significant([raw[i]["p"] for i in idx], q=bh_q)
+        fam_p = [raw[i]["p"] for i in idx]
+        # Audit fix 2026-09-28: a matrix family's size is its WHOLE matrix (RESEARCH_PROTOCOL
+        # S10: "promoting a cell counts the whole matrix as tested"), not just the cells that
+        # happen to be promoted into YAML files. Before this, a family with ONE promoted cell
+        # (H016, from a 6x6 = 36-cell matrix) ran BH over a list of length 1 -- i.e. no
+        # correction at all -- and H016 (p=0.098) was labelled `candidate` on real data. The
+        # un-promoted cells are padded in as p=1.0 (never significant themselves), which makes
+        # the BH thresholds use the true family size.
+        fam_size = max([len(idx)] + [int(cells_by_id[(raw[i]["id"], raw[i]["version"])] or 1) for i in idx])
+        fam_p = fam_p + [1.0] * (fam_size - len(idx))
+        fam_sig = ledger_mod.bh_significant(fam_p, q=bh_q)[: len(idx)]
         for i, sig in zip(idx, fam_sig):
             bh_sig_family[i] = bool(sig)
 
