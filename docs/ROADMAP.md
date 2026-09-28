@@ -475,10 +475,25 @@ see it in replay. -- Confirmed 2026-09-28: Akash clicked a gallery link (2026-03
 opened ?date=2026-03-03&until=08:35, correct) and a trades.html link (2021-09-28, entry 9.75h ->
 opened ?date=2021-09-28&until=09:45, correct) in his real browser (Brave). Phase 8 is DONE.
 
-## Phase 9 — Daily automation (1–2 days)
-- [ ] 9.1 Incremental bar export. 9.2 `run_daily.bat` + Windows Task Scheduler guide (after 17:30 NY).
-- [ ] 9.3 Forward-test tracking + kill-criteria check. 9.4 Weekly calendar re-export reminder.
-**Accept:** running twice on the same day is idempotent.
+## Phase 9 — Daily automation (1–2 days) -- 9.1/9.2/9.4 DONE 2026-09-28
+- [x] 9.1 Incremental bar export: `mt5_export.py --append-to <existing csv>` pulls only bars
+  newer than the file's own last one (plus a few days' overlap, de-duplicated by bar time) and
+  appends in place, instead of writing a new dated file every day.
+- [x] 9.2 `run_daily.bat` (chains the incremental export -> `nylab run --dedupe-same-day` ->
+  calendar-freshness check, logs to `logs\run_daily.log`, no `pause` since it must survive
+  running unattended) + `docs/DAILY_AUTOMATION.md`'s step-by-step Windows Task Scheduler guide.
+- [ ] 9.3 Forward-test tracking + kill-criteria check -- **deliberately not built yet.** Forward
+  testing only applies to a model that has already survived OOS + robustness
+  (RESEARCH_PROTOCOL S7); none currently has (15 hypotheses `noise`, H016 `weak`,
+  `london_sweep_reversal` `negative` -- see the latest `nylab run` summary). Building
+  `research/forward/<model>.csv` tracking now would have nothing real to track. Revisit the
+  moment a model's verdict actually earns it (RESEARCH_PROTOCOL S8's default kill criteria are
+  already written down and ready to wire in at that point).
+- [x] 9.4 Weekly calendar re-export reminder: `nylab.calendar_io.freshness_message` (called from
+  `run_daily.bat`'s own step 3) prints a note once `data/calendar.parquet` is over 7 days old.
+**Accept:** running twice on the same day is idempotent -- verified (ledger row count identical,
+report folder cleanly overwritten, no duplicate bars) before this was handed to Akash to confirm
+on his own machine.
 
 ## Phase 10 — Research loop (ongoing)
 Follow CLAUDE.md §6. Suggested first questions (each = counted hypothesis or family):

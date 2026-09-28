@@ -149,3 +149,48 @@ def test_calendar_columns_registered_in_column_docs_for_lookahead_check():
     # And the merge into nylab.days.COLUMN_DOCS actually happened at import time.
     for col in docs:
         assert col in COLUMN_DOCS, f"{col} missing from nylab.days.COLUMN_DOCS -- Phase 3 look-ahead check would miss it"
+
+
+# --------------------------------------------------------------------- ROADMAP 9.4 (2026-09-28)
+def test_freshness_message_missing_file_says_so(tmp_path):
+    from nylab import calendar_io
+    path = str(tmp_path / "calendar.parquet")  # never created
+    msg = calendar_io.freshness_message(path)
+    assert msg is not None
+    assert "no" in msg and path in msg
+
+
+def test_freshness_message_fresh_file_returns_none(tmp_path):
+    from nylab import calendar_io
+    path = tmp_path / "calendar.parquet"
+    path.write_bytes(b"x")  # just needs to exist with a fresh mtime
+    msg = calendar_io.freshness_message(str(path))
+    assert msg is None
+
+
+def test_freshness_message_stale_file_flags_it(tmp_path):
+    import os
+    import time
+
+    from nylab import calendar_io
+    path = tmp_path / "calendar.parquet"
+    path.write_bytes(b"x")
+    old = time.time() - 10 * 86400  # 10 days old
+    os.utime(path, (old, old))
+    msg = calendar_io.freshness_message(str(path), max_age_days=7)
+    assert msg is not None
+    assert "10" in msg
+    assert "calendar-import" in msg or "calendar_export.csv" in msg
+
+
+def test_freshness_message_respects_max_age_days(tmp_path):
+    import os
+    import time
+
+    from nylab import calendar_io
+    path = tmp_path / "calendar.parquet"
+    path.write_bytes(b"x")
+    age = time.time() - 3 * 86400  # 3 days old
+    os.utime(path, (age, age))
+    assert calendar_io.freshness_message(str(path), max_age_days=7) is None
+    assert calendar_io.freshness_message(str(path), max_age_days=1) is not None

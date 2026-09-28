@@ -125,3 +125,22 @@ def save(df: pd.DataFrame, path: str = "data/calendar.parquet") -> None:
 
 def load_cache(path: str = "data/calendar.parquet") -> pd.DataFrame:
     return pd.read_parquet(path)
+
+
+def freshness_message(path: str = "data/calendar.parquet", max_age_days: float = 7.0) -> str | None:
+    """ROADMAP 9.4: run_daily.bat's weekly re-export reminder. Purely informational -- calendar
+    features are optional (`nylab run` already runs fine without data/calendar.parquet, just
+    skipping news columns), so this never raises or blocks anything, only returns a message to
+    print (or None when there's nothing to say). Kept as a plain function, not inline batch-file
+    logic, so it's unit-testable without a real Windows/MT5 setup."""
+    import os
+    import time
+
+    if not os.path.exists(path):
+        return (f"no {path} yet -- news features are being skipped (optional; see README / "
+                f"ROADMAP Phase 4 to set it up).")
+    age_days = (time.time() - os.path.getmtime(path)) / 86400
+    if age_days < max_age_days:
+        return None
+    return (f"{path} is {age_days:.0f} days old -- re-export calendar_export.csv (see README) "
+            f"and run: python -m nylab calendar-import calendar_export.csv")

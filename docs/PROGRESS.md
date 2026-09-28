@@ -2048,3 +2048,104 @@ the table cell and the on-chart highlight label; nothing about detection changed
 disagreements were a display-labeling issue, now fixed, not a detection problem). No code changes
 to any detector this round -- only the hand-check page's own display and the replay trainer's
 UI/UX (all captured above). HANDOFF.md S4 Step 3 is done.
+
+---
+
+### 2026-09-28 -- Phase 9: daily automation
+
+Akash picked "Phase 9: daily automation" as the next phase after Phase 7 hand-check closed. Goal:
+let a fresh day of candles + a fresh `nylab run` happen automatically every morning, instead of
+Akash re-downloading and re-running everything by hand.
+
+**Before building anything -- re-checked my own claim.** My first plan mentioned that running
+`nylab run` twice in one day could "inflate the multiple-testing count (`m`) and quietly weaken
+the statistics." Akash's reply was: *"go ahead, whatever feels right to u. BUT THINK TWICE AND
+MAKE THE RIGHT DESICIONS AFTER VERIFICATION"* -- so before writing any code, I went back and
+actually read `nylab/ledger.py`'s `distinct_m()`. It turns out that claim was **overstated**:
+`m` is already computed by deduping ledger rows on `(id, version)` -- a hypothesis that gets
+written to the ledger twice on the same day with no change still only counts once toward `m`.
+Likewise `bh_significant()` (the significance flag) is computed fresh from the current run's own
+p-values every time, never re-read from ledger history. So re-running the pipeline never actually
+corrupts the statistics. The real (much smaller) problem with re-running is just **file bloat**:
+duplicate rows in `research/ledger.csv`, and a confusing pile of same-day report folders. Built
+the fix accordingly -- a housekeeping guard, not a statistics fix -- and said so plainly in the
+code's own docstring so this isn't quietly overstated to future-Akash either.
+
+**9.1 -- incremental candle export.** `mt5_export.py` gained an `--append-to <file>` mode: instead
+of re-downloading the whole multi-year history every morning, it reads the existing CSV, asks MT5
+only for bars from a few days before the last saved bar onward (a small overlap window, default 3
+days, so nothing gets missed if the terminal was closed for a day or two), merges, drops any
+duplicate timestamps, sorts, and writes back to the same file. The actual merge logic
+(`_merge_incremental`) is a small, pure function with no MT5 dependency, so it's fully unit
+tested (5 tests, `tests/test_mt5_export.py`) even though the MT5 connection itself can only be
+tested on Akash's Windows machine.
+
+**9.2 -- the daily script + ledger dedup guard.** `nylab run` gained a `--dedupe-same-day` flag:
+when set, any ledger row for a hypothesis `(id, version)` that was already written *today* is
+skipped on a re-run. 4 new tests in `tests/test_ledger.py`, all passing. `run_daily.bat` (new,
+repo root) chains the three pieces for one unattended morning run: `[1/3]` pulls new candles
+(`mt5_export.py --append-to`), `[2/3]` re-runs the research pipeline with a stable per-day run id
+(`--dedupe-same-day --run-id daily-<today>`), `[3/3]` checks whether `data/calendar.parquet` is
+getting stale. It writes to one single append-only log file (`logs\run_daily.log`) and has no
+`pause`, so it won't hang waiting for a keypress that will never come when Task Scheduler runs it
+overnight. (First draft of this script buried the calendar-age check in nested batch `if`
+conditionals with an embedded `python -c "...()..."` call -- a fragile, hard-to-verify cmd.exe
+pattern I couldn't test without a real Windows box. Caught this myself and moved that logic into
+a proper, unit-tested Python subcommand instead -- see 9.4.)
+
+**9.3 -- forward-test tracking: deliberately NOT built yet.** RESEARCH_PROTOCOL.md says forward
+testing only applies to a model that has already survived out-of-sample testing and robustness
+checks. Right now nothing in the ledger qualifies -- every hypothesis run so far is `noise` or
+`weak`, and the one candidate worth watching (`london_sweep_reversal`) is currently negative.
+Building a forward-test/kill-criteria tracker with no real candidate to track would just be
+speculative scaffolding. Left `[ ]` unchecked in ROADMAP.md with this reasoning written down --
+worth revisiting the moment a hypothesis actually earns forward-test status.
+
+**9.4 -- calendar freshness reminder.** `nylab/calendar_io.py` gained `freshness_message()`: a
+small function that checks how old `data/calendar.parquet` is and returns a plain-English note
+("your calendar file is N days old, consider refreshing it") if it's past 7 days, or `None` if
+it's fine. Exposed as `nylab calendar-freshness` on the command line, and that's what
+`run_daily.bat`'s `[3/3]` step calls. 4 new tests in `tests/test_calendar.py`, all passing.
+
+**End-to-end verification (scratch paths only, real `research/ledger.csv` never touched):** ran
+the actual 372,719-bar CSV through `nylab run --dedupe-same-day` repeatedly with a scratch ledger:
+first run wrote 16 ledger rows (17 lines incl. header); a second run, different `--run-id`, same
+day, same flag -- still 17 lines, confirming the dedup guard works; a third run *without* the flag
+grew the ledger to 33 lines, confirming the flag is doing real work and this isn't a test that
+would pass either way; finally, two runs with the *exact* `run_daily.bat` pattern
+(`--run-id daily-2026-09-28 --dedupe-same-day`, run twice) left the ledger at 17 lines and only
+one `daily-2026-09-28` report folder on disk (cleanly overwritten, not duplicated) -- which is
+exactly what an accidental double-run of the real overnight task should do.
+
+**What Akash still needs to do himself (none of this can be run/tested from here -- this device
+shell is Linux, not Windows, and has no MT5):** actually run `run_daily.bat` once by hand (open
+Command Prompt, don't double-click, so the window stays open and errors are visible) to confirm
+it works against his real MT5 terminal, then set up Windows Task Scheduler following the new
+`docs/DAILY_AUTOMATION.md` guide (daily trigger, 4:30 AM -- picked to sit safely after NY's 17:30
+session rollover on both sides of US daylight saving).
+
+**Not committed yet.** Per the standing rule, this waits for Akash to run `run_tests.bat` on his
+machine and paste the result before anything in this batch gets committed.
+
+**Confirmed 2026-09-28**: `run_tests.bat` on Akash's machine -- 332 passed, pandas 3.0.6, python
+3.14.6, 14m45s.
+
+**Then Akash actually ran `run_daily.bat` for real -- and it failed on step 1**, the window
+opening and closing before he could read it. The log (`logs/run_daily.log`, now gitignored --
+grows over time, not source) showed the real error:
+`TypeError: can't compare offset-naive and offset-aware datetimes`. This was a genuine bug in
+`mt5_export.py`'s new `--append-to` incremental mode -- `end` was built from
+`datetime.now(timezone.utc)` (timezone-AWARE), but `last_existing` (the last bar's time, read
+back from Akash's own CSV) is timezone-NAIVE, and comparing the two crashed immediately. This
+slipped through because the mt5-dependent parts of `mt5_export.py` can't be unit tested in this
+sandbox (no MT5 on Linux) -- only the pure merge function was covered before.
+
+**Fix**: pulled the start/end window calculation out into its own pure function
+(`_request_window`), switched `datetime.now(timezone.utc)` to `datetime.utcnow()` (same instant,
+just naive, matching everything else in the file), and added 2 new regression tests
+(`tests/test_mt5_export.py`, now 7 tests total) that specifically assert start/end always come
+back naive and `start < end` -- so this exact class of bug can't silently come back. All 48
+tests across `test_mt5_export.py`/`test_ledger.py`/`test_calendar.py` still pass here on pandas
+2.3.3. This needs one more `run_tests.bat` (pandas 3.0.6) and then an actual re-run of
+`run_daily.bat` on Akash's machine to confirm the fix works against his real MT5 terminal, before
+committing.

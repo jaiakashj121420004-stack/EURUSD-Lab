@@ -219,7 +219,7 @@ def cmd_run(args):
                                                           fee_usd=maven_fee_usd)
     summary_mod.write(summ, os.path.join(out_dir, "summary.json"))
 
-    ledger_mod.append(ledger_rows, path=ledger_path)
+    ledger_mod.append(ledger_rows, path=ledger_path, dedupe_same_day=args.dedupe_same_day)
 
     if not args.no_cache:
         cache_mod.save(df, d, cache_dir=args.cache_dir)
@@ -249,6 +249,17 @@ def cmd_calendar_import(args):
           f"by currency: {dict(by_ccy)}")
     print(f"Saved {os.path.abspath(args.out)} -- `nylab run` will pick it up automatically next time "
           f"(via --calendar, default data/calendar.parquet).")
+
+
+def cmd_calendar_freshness(args):
+    """ROADMAP 9.4, thin CLI wrapper around calendar_io.freshness_message (see there for why the
+    logic itself lives in a plain testable function, not here or in run_daily.bat). Always exits
+    0 -- purely informational, never blocks the daily automation script."""
+    msg = calendar_io.freshness_message(args.calendar)
+    if msg:
+        print(f"NOTE: {msg}")
+    else:
+        print(f"{args.calendar} looks fresh.")
 
 
 def cmd_hypothesis_add(args):
@@ -377,6 +388,11 @@ def main():
     p_run.add_argument("--run-id", dest="run_id", default=None)
     p_run.add_argument("--cache-dir", dest="cache_dir", default="data/cache")
     p_run.add_argument("--no-cache", dest="no_cache", action="store_true")
+    p_run.add_argument("--dedupe-same-day", dest="dedupe_same_day", action="store_true",
+                        help="ROADMAP 9.2: skip writing a ledger row for any (id, version) that "
+                             "already has one timestamped today -- for the daily automation "
+                             "script, so re-running (or a retry) on the same day doesn't pile up "
+                             "duplicate rows. Off by default; a normal manual run is unaffected.")
     p_run.add_argument("--ledger-path", dest="ledger_path", default="research/ledger.csv",
                         help="append-only multiple-testing ledger (RESEARCH_PROTOCOL.md S4)")
     p_run.add_argument("--replay-host", dest="replay_host", default="127.0.0.1",
@@ -458,6 +474,11 @@ def main():
     p_cal.add_argument("--tz", default="ny+7", help="MUST match the --tz your `nylab run` used for bars")
     p_cal.add_argument("--out", default="data/calendar.parquet")
     p_cal.set_defaults(func=cmd_calendar_import)
+
+    p_cal_fresh = sub.add_parser("calendar-freshness", help="ROADMAP 9.4: print a reminder if "
+                                                              "data/calendar.parquet is more than a week old")
+    p_cal_fresh.add_argument("--calendar", default="data/calendar.parquet")
+    p_cal_fresh.set_defaults(func=cmd_calendar_freshness)
 
     for name, phase in [
         ("export", "Phase 9 (mt5_export.py at the repo root still works standalone today)"),

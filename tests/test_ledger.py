@@ -1,5 +1,6 @@
 """nylab.ledger -- the append-only multiple-testing ledger (RESEARCH_PROTOCOL.md S4, ROADMAP 3.4/3.5)."""
 import numpy as np
+import pandas as pd
 
 from nylab import ledger as ledger_mod
 
@@ -101,6 +102,63 @@ def test_append_migrates_old_schema_ledger_in_place(tmp_path):
     assert len(df) == 2
     assert df.loc[0, "run_id"] == "r1" and df.loc[0, "matrix_cells"] == 1  # migrated, unchanged otherwise
     assert df.loc[1, "run_id"] == "r2" and df.loc[1, "matrix_cells"] == 36
+
+
+def test_dedupe_same_day_skips_a_repeat_of_the_same_id_version(tmp_path):
+    """ROADMAP 9.2: the daily automation script's safety net -- re-running the same unchanged
+    hypothesis later the SAME day should not write a second physical row."""
+    path = str(tmp_path / "ledger.csv")
+    today = pd.Timestamp.now(tz="UTC").isoformat()
+    ledger_mod.append([dict(run_id="r1", timestamp=today, kind="hypothesis", id="H001", version="1.0",
+                             n=1, stat=0, p=1, is_metric=None, oos_metric=None, verdict="noise", notes="")],
+                       path=path)
+    ledger_mod.append([dict(run_id="r2", timestamp=today, kind="hypothesis", id="H001", version="1.0",
+                             n=1, stat=0, p=1, is_metric=None, oos_metric=None, verdict="noise", notes="")],
+                       path=path, dedupe_same_day=True)
+    df = ledger_mod.load(path)
+    assert len(df) == 1
+    assert df.loc[0, "run_id"] == "r1"  # the original row, untouched
+
+
+def test_dedupe_same_day_still_writes_a_genuinely_new_id(tmp_path):
+    path = str(tmp_path / "ledger.csv")
+    today = pd.Timestamp.now(tz="UTC").isoformat()
+    ledger_mod.append([dict(run_id="r1", timestamp=today, kind="hypothesis", id="H001", version="1.0",
+                             n=1, stat=0, p=1, is_metric=None, oos_metric=None, verdict="noise", notes="")],
+                       path=path)
+    ledger_mod.append([dict(run_id="r2", timestamp=today, kind="hypothesis", id="H002", version="1.0",
+                             n=1, stat=0, p=1, is_metric=None, oos_metric=None, verdict="noise", notes="")],
+                       path=path, dedupe_same_day=True)
+    df = ledger_mod.load(path)
+    assert len(df) == 2
+    assert set(df["id"]) == {"H001", "H002"}
+
+
+def test_dedupe_same_day_does_not_skip_a_repeat_on_a_different_day(tmp_path):
+    """A row from yesterday shouldn't block today's row for the same (id, version)."""
+    path = str(tmp_path / "ledger.csv")
+    yesterday = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=1)).isoformat()
+    today = pd.Timestamp.now(tz="UTC").isoformat()
+    ledger_mod.append([dict(run_id="r1", timestamp=yesterday, kind="hypothesis", id="H001", version="1.0",
+                             n=1, stat=0, p=1, is_metric=None, oos_metric=None, verdict="noise", notes="")],
+                       path=path)
+    ledger_mod.append([dict(run_id="r2", timestamp=today, kind="hypothesis", id="H001", version="1.0",
+                             n=1, stat=0, p=1, is_metric=None, oos_metric=None, verdict="noise", notes="")],
+                       path=path, dedupe_same_day=True)
+    df = ledger_mod.load(path)
+    assert len(df) == 2
+
+
+def test_dedupe_same_day_false_by_default_keeps_old_behavior(tmp_path):
+    """Default (no flag) is the pre-9.2 behavior: every row gets written, always -- a manual
+    `python -m nylab run` (no --dedupe-same-day) must be completely unaffected by this feature."""
+    path = str(tmp_path / "ledger.csv")
+    today = pd.Timestamp.now(tz="UTC").isoformat()
+    row = dict(run_id="r", timestamp=today, kind="hypothesis", id="H001", version="1.0",
+               n=1, stat=0, p=1, is_metric=None, oos_metric=None, verdict="noise", notes="")
+    ledger_mod.append([row], path=path)
+    ledger_mod.append([row], path=path)
+    assert len(ledger_mod.load(path)) == 2
 
 
 def test_bonferroni_alpha():

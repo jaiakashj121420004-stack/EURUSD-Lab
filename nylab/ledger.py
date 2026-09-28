@@ -49,9 +49,21 @@ def _migrate_matrix_cells_column(path: str) -> None:
     existing.to_csv(path, index=False)
 
 
-def append(rows: list[dict], path: str = DEFAULT_PATH) -> None:
+def append(rows: list[dict], path: str = DEFAULT_PATH, dedupe_same_day: bool = False) -> None:
     """Append-only: never rewrites or drops an existing row's VALUES, only adds new ones on the
-    end (see _migrate_matrix_cells_column for the one allowed schema-widening exception)."""
+    end (see _migrate_matrix_cells_column for the one allowed schema-widening exception).
+
+    `dedupe_same_day` (ROADMAP 9.2, added 2026-09-28 for the daily-automation script): drops any
+    row whose (id, version) already has an entry timestamped TODAY before writing. Off by default
+    -- every existing caller (a manual `python -m nylab run`) keeps writing every row it's given,
+    unchanged. Note this is a HOUSEKEEPING guard, not a statistics-correctness one: `distinct_m()`
+    already dedupes by (id, version) regardless of how many duplicate rows physically exist in the
+    file, so re-running an unchanged hypothesis twice in a day was never actually inflating `m` or
+    feeding bh_significant() historical data (that's computed fresh from the CURRENT run's own
+    p-values, never re-read off the ledger). The real problem `dedupe_same_day` solves is that an
+    automated daily run, called more than once on a quiet day where nothing changed, would
+    otherwise write out hundreds of byte-identical rows over a year for no informational gain --
+    this keeps the file to one row per (id, version) per calendar day."""
     if not rows:
         return
     parent = os.path.dirname(path)
@@ -60,6 +72,24 @@ def append(rows: list[dict], path: str = DEFAULT_PATH) -> None:
     _migrate_matrix_cells_column(path)
     df = pd.DataFrame(rows, columns=LEDGER_COLUMNS)
     df["matrix_cells"] = df["matrix_cells"].fillna(1).astype(int)
+    if dedupe_same_day:
+        # hyp_engine.evaluate() stamps every row with pd.Timestamp.now(tz="UTC").isoformat() --
+        # compare in UTC too, or a run near local midnight could straddle two different "today"s
+        # and miss a duplicate it should have caught (harmless either way, see the docstring
+        # above, but UTC keeps this consistent with what's actually stored).
+        today = pd.Timestamp.now(tz="UTC").date()
+        existing = load(path)
+        if len(existing):
+            ts = pd.to_datetime(existing["timestamp"], errors="coerce", utc=True)
+            already_today = set(zip(
+                existing.loc[ts.dt.date == today, "id"].astype(str),
+                existing.loc[ts.dt.date == today, "version"].astype(str),
+            ))
+            if already_today:
+                keep = ~df.apply(lambda r: (str(r["id"]), str(r["version"])) in already_today, axis=1)
+                df = df[keep]
+        if df.empty:
+            return
     header = not os.path.exists(path)
     df.to_csv(path, mode="a", header=header, index=False)
 

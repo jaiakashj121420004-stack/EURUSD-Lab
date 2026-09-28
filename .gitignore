@@ -33,3 +33,6 @@ research/label_validation_answers*.json
 research/replay/trades_BACKUP*.csv
 report_preview_*.html
 .env
+
+# run_daily.bat log (grows over time; not source)
+logs/
