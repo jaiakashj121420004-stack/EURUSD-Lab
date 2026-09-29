@@ -2149,3 +2149,67 @@ tests across `test_mt5_export.py`/`test_ledger.py`/`test_calendar.py` still pass
 2.3.3. This needs one more `run_tests.bat` (pandas 3.0.6) and then an actual re-run of
 `run_daily.bat` on Akash's machine to confirm the fix works against his real MT5 terminal, before
 committing.
+
+---
+
+### 2026-09-29 -- Market Profile: a descriptive map of how EURUSD has behaved
+
+Akash's request (2026-09-28 night, after Phase 9 was pushed): he wanted to actually *understand*
+EURUSD, not just have hypotheses tested one at a time -- session-to-session relationships
+("if Asia did X and London did Y, what does NY usually do"), in-session timing ("when's the best
+hour to trade, what does an early sweep usually lead to"), news reaction by session, and
+seasonality (quarterly/weekly/daily/hourly patterns), across the full 5 years. He then said
+"i am going to bed now, so build all of it in a single push overnight. u have all the
+permissions" and, separately, to go ahead and push what had already been built (Phase 9).
+
+**The important distinction, explained to him before starting and repeated on the report page
+itself:** the 16 hypotheses in `config/hypotheses/` are *confirmatory* -- each pre-registered,
+tested once, penalized for how many were tried (Bonferroni), checked out-of-sample. That's what
+lets a "yes" there be trusted. What Akash asked for here is *exploratory* -- slicing the same
+years of data dozens of different ways at once (every session-pair combo, every hour, every
+weekday, every month...). With that many slices shown side by side, some will look like a real
+pattern purely by chance -- the exact trap the hypothesis pipeline exists to avoid. So this was
+built and labelled as a **descriptive map for building intuition, not a new source of tested
+edges** -- every table shows its own sample size and flags anything under 20 days as
+low-confidence, but deliberately applies no multiple-testing correction on top (that would be
+false precision for something meant to be read, not traded on directly).
+
+**Built:**
+- `nylab/market_profile.py` -- pure, independently testable functions, all built on columns
+  `nylab.sessions`/`nylab.days` already compute (session `character`, `dir`, `range_rel`,
+  `first_raid_t`, `news_high_usd/eur`, `dow`, `day_type`, etc.) -- no new price-action detection
+  logic was written for this. Covers: session-relationship crosstabs (predecessor
+  character(s) -> outcome direction/character, with counts and dominant outcome); early-vs-late
+  sweep timing and quiet-start outcome tables; news-present-vs-absent comparisons; hour-of-day
+  range/direction profile (bar-level, all 24 NY hours); weekday, "which weekday sets the week's
+  high/low", monthly, and quarterly profiles. 12 new tests (`tests/test_market_profile.py`),
+  all passing.
+- `nylab/report/market_profile_report.py` + `python -m nylab market-profile` -- builds
+  `reports/market_profile/report.html`, reusing the day-table cache from the last `nylab run`
+  by default (`data/cache/`) so it doesn't recompute 370k+ bars just to build this. The page
+  opens with a plain-English "Highlights" list (auto-picked from the tables -- e.g. busiest/
+  quietest hour, widest/narrowest weekday and month) and a disclaimer box at the top repeating
+  the descriptive-not-tested point before any table.
+- Ran it for real against Akash's actual 1,297-day cache: numbers came out sensible and
+  consistent with what the lab already knows to be true -- e.g. the hour-of-day table's widest
+  range hours are 08:00-11:00 NY, matching the pipeline's own existing volatility-peak sanity
+  check (`nylab.data.timezones.sanity_check`), a good independent confirmation the new code isn't
+  quietly broken.
+
+**What this is for, going forward:** Phase 10 (`docs/ROADMAP.md`) already had a "suggested first
+questions" list for the ongoing research loop -- this report is where to go looking for more
+candidates, and for a sanity check on ones already suggested (e.g. question 1, "London character
+-> NY AM character", now has a real table to look at). Nothing on this page is a new verdict;
+anything that looks worth trading needs to become a proper hypothesis in
+`config/hypotheses/` and earn a verdict the way H013/H014 did.
+
+**Test status -- an exception to the usual rule, disclosed plainly:** built and tested overnight
+while Akash was asleep, per his explicit instruction to push the whole thing through without
+waiting. 12 new tests pass here, and the full new command was actually run end-to-end against
+his real cached data (not just unit-tested in isolation). Unlike every other batch this session,
+this one was **committed and pushed without Akash first running `run_tests.bat` on his own
+machine (pandas 3.0.6)** -- normally that confirmation comes first. This is a deliberate,
+one-time exception to the standing workflow because he explicitly asked for the full push
+overnight and wasn't available to test it himself; it's flagged here and in the commit message so
+it isn't quietly treated as equivalent to the usual confirmed-then-committed pattern. Worth a
+`run_tests.bat` pass whenever convenient, same as any other change.

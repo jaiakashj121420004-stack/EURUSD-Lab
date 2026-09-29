@@ -496,6 +496,36 @@ report folder cleanly overwritten, no duplicate bars) before this was handed to 
 on his own machine.
 
 ## Phase 10 — Research loop (ongoing)
+
+### 10.0 Market Profile -- descriptive foundation [x] DONE 2026-09-29
+Akash asked (2026-09-28 night) to "understand EURUSD" broadly before picking the next hypothesis:
+session-to-session relationships, in-session timing, news reaction, and seasonality (weekday/
+month/quarter/hour), across the full 5 years. Built `nylab/market_profile.py` (pure, tested
+functions -- reuses the SESSION table nylab.sessions already computes; no new price-action
+detection) + `nylab/report/market_profile_report.py` + `python -m nylab market-profile` (reuses
+the `nylab run` day-table cache by default, so it doesn't recompute 370k+ bars). Report:
+`reports/market_profile/report.html`.
+
+**Deliberately kept separate from hyp_engine's verdict pipeline** -- every table there is labelled
+DESCRIPTIVE, not tested: it slices the same years dozens of ways at once (every session-pair,
+every hour, every weekday...), so some slices will look like a pattern by pure chance the same
+way testing 16 hypotheses at once would without Bonferroni. No multiple-testing correction is
+applied on top (that would be false precision for an intuition-building map); every table shows
+its own n and flags rows under 20 days as low-confidence instead. A slice that looks interesting
+belongs in `config/hypotheses/` next, to earn a real verdict the way H013/H014 did -- this page
+is where to go looking for candidates for the "suggested first questions" list right below, not
+a replacement for testing them.
+
+Built and tested overnight (2026-09-28/29) while Akash was away, per his explicit "build all of
+it, all permissions" -- 12 new unit tests (`tests/test_market_profile.py`) plus the 60 tests
+across the Phase 9 files, all passing here on pandas 2.3.3; also actually run end-to-end against
+his real 1,297-day cache and spot-checked the numbers (e.g. NY's 08:00-11:00 window shows the
+widest hourly ranges, matching the pipeline's own known volatility-peak sanity check). Not yet
+confirmed with `run_tests.bat` on pandas 3.0.6 -- unlike every other batch this session, this one
+was committed and pushed without that confirmation first, because Akash was asleep and explicitly
+asked for the full push overnight rather than gating on his own test run. Flagged to him plainly;
+worth a `run_tests.bat` pass at his convenience regardless, same as anything else.
+
 Follow CLAUDE.md §6. Suggested first questions (each = counted hypothesis or family):
 1. London character → NY AM character (matrix family; promote at most 2 cells).
 2. Red EUR news in London with \|z\| > 1 → does NY AM reverse London's direction?

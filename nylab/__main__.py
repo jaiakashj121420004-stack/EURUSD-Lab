@@ -20,6 +20,7 @@ from nylab import days as days_mod
 from nylab import sessions as sessions_mod
 from nylab import hyp_engine, hyp_loader
 from nylab import label_validate
+from nylab import market_profile as market_profile_mod
 from nylab import ledger as ledger_mod
 from nylab import stats as stats_mod
 from nylab.data import loader, quality, timezones
@@ -31,6 +32,7 @@ from nylab.report import charts as charts_mod
 from nylab.report import deeplink as deeplink_mod
 from nylab.report import gallery_section as gallery_section_mod
 from nylab.report import html as html_mod
+from nylab.report import market_profile_report as market_profile_report_mod
 from nylab.report import maven_section as maven_section_mod
 from nylab.report import robustness_section as robustness_section_mod
 from nylab.report import sessions_section as sessions_section_mod
@@ -262,6 +264,46 @@ def cmd_calendar_freshness(args):
         print(f"{args.calendar} looks fresh.")
 
 
+def cmd_market_profile(args):
+    """ROADMAP 10 (Akash's 'help me understand EURUSD itself' request, 2026-09-28/29): build
+    reports/market_profile/report.html -- a DESCRIPTIVE map (session relationships, in-session
+    timing, news reaction, seasonality), not a new tested hypothesis. See
+    nylab.market_profile's module docstring for why this is kept clearly separate from the
+    hyp_engine verdict pipeline. Reuses the day-table cache from the most recent `nylab run`
+    (data/cache/) when present and not told to rebuild, since this needs the exact same day
+    table `nylab run` already builds -- no point recomputing 370k+ bars twice."""
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+    df = d = None
+    if not args.rebuild:
+        try:
+            df, d = cache_mod.load(args.cache_dir)
+            print(f"  reusing cached day table from {args.cache_dir} ({len(d)} days) -- "
+                  f"pass --rebuild to recompute from {args.csv or 'a CSV'} instead")
+        except Exception:
+            df = d = None
+    if df is None or d is None:
+        if not args.csv:
+            sys.exit("No cache found at " + args.cache_dir + " -- pass a CSV (e.g. "
+                      "`nylab market-profile EURUSD_M5_....csv`) so it can be built fresh.")
+        print("Loading", args.csv)
+        df, mode, bar = _prepare_bars(args.csv, args.tz)
+        d = days_mod.build_days(df, cfg.legacy_windows())
+        cal = calendar_io.load_cache(args.calendar) if os.path.exists(args.calendar) else None
+        if cal is not None:
+            d = days_mod.attach_calendar_features(d, cal, cfg.sessions())
+        sessions_cfg = cfg.sessions()
+        session_tables = sessions_mod.build_all_sessions(df, d, cal, sessions_cfg, cfg.legacy_windows()["pip"])
+        d = sessions_mod.attach_session_features(d, session_tables)
+        d = d.join(sessions_mod.build_day_types(d))
+
+    pip = cfg.legacy_windows()["pip"]
+    html = market_profile_report_mod.build(d, df, pip, cfg.sessions())
+    with open(args.out, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"\nMarket profile report: {os.path.abspath(args.out)}")
+    print("Descriptive only -- see the notice at the top of the page before treating anything in it as a trading edge.")
+
+
 def cmd_hypothesis_add(args):
     """ROADMAP 3.6: scaffold a new hypothesis YAML from a template, so adding an idea is
     'fill in a form', not 'write Python and risk a look-ahead bug'. Deliberately writes
@@ -479,6 +521,17 @@ def main():
                                                               "data/calendar.parquet is more than a week old")
     p_cal_fresh.add_argument("--calendar", default="data/calendar.parquet")
     p_cal_fresh.set_defaults(func=cmd_calendar_freshness)
+
+    p_mp = sub.add_parser("market-profile", help="ROADMAP 10: build a DESCRIPTIVE "
+                                                   "session/timing/news/seasonality map (not a tested hypothesis) "
+                                                   "-- reuses the last `nylab run`'s cache by default")
+    p_mp.add_argument("csv", nargs="?", default=None, help="only needed if there's no cache yet, or with --rebuild")
+    p_mp.add_argument("--tz", default="auto")
+    p_mp.add_argument("--calendar", default="data/calendar.parquet")
+    p_mp.add_argument("--cache-dir", dest="cache_dir", default="data/cache")
+    p_mp.add_argument("--rebuild", action="store_true", help="recompute from --csv instead of reusing the cache")
+    p_mp.add_argument("--out", default="reports/market_profile/report.html")
+    p_mp.set_defaults(func=cmd_market_profile)
 
     for name, phase in [
         ("export", "Phase 9 (mt5_export.py at the repo root still works standalone today)"),
