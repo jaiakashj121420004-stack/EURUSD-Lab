@@ -4,15 +4,28 @@ Studies EURUSD across **Asia, London, NY AM, NY PM and the Silver Bullet windows
 history, with a focus on how earlier sessions shape later ones. Also includes (once built) a **free replay
 trainer** that jumps to any date and filters days. Read-only: nothing here can place a trade.
 
-## What exists today vs what Claude will build
+## Current status (2026-09-29)
 
-- **Exists now (v0):** `mt5_export.py` (gets your data out of MT5) and `ny_session_lab.py` (a one-shot
-  NY-session report). It's a measuring script, not the agent.
-- **Claude builds:** everything in `docs/ROADMAP.md` — all sessions, cross-session analysis, news from MT5's
-  calendar, the replay trainer, ICT feature detection, models, the Maven pass simulator, daily automation —
-  and then *operates* it as your research agent.
+Phases 0-9 and 10.0 are done -- see `docs/ROADMAP.md` for the full checklist and `docs/PROGRESS.md`
+for the story of how each one went. In short, this is no longer just "a measuring script" (that was
+v0, kept below for reference) -- it's a daily-running research pipeline:
+
+- **Daily automation is live:** `run_daily.bat` pulls new candles, re-runs every hypothesis, and
+  refreshes the report on its own once Windows Task Scheduler is set up (`docs/DAILY_AUTOMATION.md`).
+- **16 hypotheses tracked** in `config/hypotheses/`, tested every run with a proper statistical bar
+  (Bonferroni + out-of-sample) -- see "What the numbers mean" below. Current standing: 14 are noise,
+  2 (H013, H014) are still-standing candidates worth watching. None has been promoted to a tradeable
+  edge yet.
+- **A "Market Profile" report** (`python -m nylab market-profile`) gives a plain-language, descriptive
+  map of how EURUSD has generally behaved -- session relationships, timing, news reaction, seasonality
+  -- separate from the tested hypotheses above (it's for building intuition and finding new hypothesis
+  ideas, not itself a trading signal).
+- **The replay trainer** (`python -m nylab replay`) lets you jump to any date and inspect it by hand.
 
 ## Run v0 today (10 minutes)
+
+This is the original one-shot script from before Claude built the full pipeline above -- still works
+standalone if you just want a quick NY-session snapshot without the rest of the lab.
 
 1. Install Python 3.10+ from python.org (tick "Add python.exe to PATH").
 2. MT5: log in, Tools → Options → Charts → **Max bars in chart = Unlimited**, restart MT5.
@@ -24,6 +37,16 @@ trainer** that jumps to any date and filters days. Read-only: nothing here can p
    ```
 4. Open `ny_lab_report/report.html`. Check Section 0: volatility should peak 08:00–11:00 NY. If not,
    re-run with `--tz utc` or `--tz utc+2`.
+
+## Keeping your data fresh (daily, after the first export)
+
+Once you have a CSV from step 3 above, don't re-run a full `--years 5` export every day -- it's slow
+and unnecessary. Instead, pull only the new bars since last time, in place:
+```
+python mt5_export.py --append-to EURUSD_M5_<dates>.csv
+```
+This is also what `run_daily.bat` does automatically every morning once Task Scheduler is set up --
+see `docs/DAILY_AUTOMATION.md`.
 
 ## Build the full agent with Claude (Cowork, not Claude Code)
 
@@ -69,6 +92,16 @@ Calendar functions don't work inside the Strategy Tester -- step 4 must be a liv
 
 If your broker disables MQL5 calendar access (rare), a fallback CSV with columns
 `datetime_ny,currency,event,impact,actual,forecast,previous` works instead of steps 1-7.
+
+## Understanding EURUSD in general (Market Profile)
+
+Separate from the 16 tested hypotheses, `python -m nylab market-profile` builds a descriptive
+report (`reports/market_profile/report.html`) of how EURUSD has generally behaved: which
+session combinations tend to lead where, which hour/weekday/month tends to move most, and how
+sessions react to news. It reuses whatever data `nylab run` last cached, so it's fast to
+regenerate. Read the notice at the top of that report before treating anything in it as a
+trading signal -- it's meant to build intuition and surface ideas worth testing properly, not
+to be traded on directly.
 
 ## What the numbers mean
 - **Hit vs baseline:** an idea only matters if it happens more often than on all days.
